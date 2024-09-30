@@ -1,4 +1,4 @@
-#if FANTASY_NET && FANTASY_KCPUNSAFE
+#if FANTASY_NET
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
@@ -109,7 +109,12 @@ namespace Fantasy.Network.KCP
 
             var buffer = _packetParser.Pack(ref rpcId, ref routeId, memoryStream, message);
             Kcp.Send(buffer.GetBuffer(), 0, (int)buffer.Position);
-            _kcpServerNetwork.ReturnMemoryStream(buffer);
+            
+            if (buffer.MemoryStreamBufferSource == MemoryStreamBufferSource.Pack)
+            {
+                _kcpServerNetwork.MemoryStreamBufferPool.ReturnMemoryStream(buffer);
+            }
+            
             _kcpServerNetwork.AddUpdateChannel(ChannelId, 0);
         }
 

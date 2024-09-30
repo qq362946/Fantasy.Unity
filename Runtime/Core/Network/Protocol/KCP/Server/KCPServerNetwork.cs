@@ -1,4 +1,4 @@
-#if FANTASY_NET && FANTASY_KCPUNSAFE
+#if FANTASY_NET
 using System.Buffers;
 using System.IO.Pipelines;
 using System.Net;

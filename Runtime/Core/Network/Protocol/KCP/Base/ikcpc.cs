@@ -1,5 +1,4 @@
-﻿#if FANTASY_KCPUNSAFE
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Fantasy;
 using static KCP.IQUEUEHEAD;
@@ -1217,4 +1216,3 @@ namespace KCP
         }
     }
 }
-#endif

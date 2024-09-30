@@ -1,4 +1,3 @@
-#if FANTASY_KCPUNSAFE
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -158,4 +157,3 @@ namespace KCP
         public const uint REVERSED_HEAD = 5;
     }
 }
-#endif

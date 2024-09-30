@@ -1,4 +1,4 @@
-#if !FANTASY_WEBGL && FANTASY_KCPUNSAFE
+#if !FANTASY_WEBGL
 using System;
 using System.Buffers;
 using System.Collections.Generic;
@@ -530,10 +530,19 @@ namespace Fantasy.Network.KCP
                 Dispose();
                 return;
             }
-            
-            _kcp.Send(memoryStream.GetBuffer(), 0, (int)memoryStream.Position);
-            ReturnMemoryStream(memoryStream);
-            AddToUpdate(0);
+
+            try
+            {
+                _kcp.Send(memoryStream.GetBuffer(), 0, (int)memoryStream.Position);
+                AddToUpdate(0);
+            }
+            finally
+            {
+                if (memoryStream.MemoryStreamBufferSource == MemoryStreamBufferSource.Pack)
+                {
+                    MemoryStreamBufferPool.ReturnMemoryStream(memoryStream);
+                }
+            }
         }
 
         private unsafe void SendRequestConnection()

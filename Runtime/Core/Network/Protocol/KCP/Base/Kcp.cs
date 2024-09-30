@@ -1,4 +1,3 @@
-#if FANTASY_KCPUNSAFE
 #if UNITY_2021_3_OR_NEWER || GODOT
 using System;
 using System.Threading;
@@ -625,4 +624,3 @@ namespace KCP
         public void SetMinrto(int minrto) => ikcp_minrto(_kcp, minrto);
     }
 }
-#endif
