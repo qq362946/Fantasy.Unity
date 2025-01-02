@@ -21,8 +21,6 @@ namespace Fantasy.DataBase
     {
         private const int DefaultTaskSize = 1024;
         private Scene _scene;
-        private string _dbName;
-        private string _connectionString;
         private MongoClient _mongoClient;
         private ISerialize _serializer;
         private IMongoDatabase _mongoDatabase;
@@ -32,15 +30,13 @@ namespace Fantasy.DataBase
         /// <summary>
         /// 初始化 MongoDB 数据库连接并记录所有集合名。
         /// </summary>
-        /// <param name="scene">所在的Scene。</param>
+        /// <param name="scene">场景对象。</param>
         /// <param name="connectionString">数据库连接字符串。</param>
         /// <param name="dbName">数据库名称。</param>
         /// <returns>初始化后的数据库实例。</returns>
         public IDataBase Initialize(Scene scene, string connectionString, string dbName)
         {
             _scene = scene;
-            _dbName = dbName;
-            _connectionString = connectionString;
             _mongoClient = new MongoClient(connectionString);
             _mongoDatabase = _mongoClient.GetDatabase(dbName);
             _dataBaseLock = scene.CoroutineLockComponent.Create(GetType().TypeHandle.Value.ToInt64());
@@ -48,6 +44,22 @@ namespace Fantasy.DataBase
             _collections.UnionWith(_mongoDatabase.ListCollectionNames().ToList());
             _serializer = SerializerManager.GetSerializer(FantasySerializerType.Bson);
             return this;
+        }
+        
+        /// <summary>
+        /// 销毁释放资源。
+        /// </summary>
+        public void Dispose()
+        {
+            // 优先释放协程锁。
+            _dataBaseLock.Dispose();
+            // 清理资源。
+            _scene = null;
+            _serializer = null;
+            _mongoDatabase = null;
+            _dataBaseLock = null;
+            _collections.Clear();
+            _mongoClient.Dispose();
         }
 
         #region Other
@@ -675,7 +687,7 @@ namespace Fantasy.DataBase
 
             using (await _dataBaseLock.Wait(clone.Id))
             {
-                await GetCollection(collection ?? clone.GetType().Name).ReplaceOneAsync(
+                await GetCollection<T>(collection).ReplaceOneAsync(
                     (IClientSessionHandle)transactionSession, d => d.Id == clone.Id, clone,
                     new ReplaceOptions { IsUpsert = true });
             }
@@ -700,8 +712,30 @@ namespace Fantasy.DataBase
 
             using (await _dataBaseLock.Wait(clone.Id))
             {
-                await GetCollection(collection ?? clone.GetType().Name).ReplaceOneAsync(d => d.Id == clone.Id, clone,
-                    new ReplaceOptions { IsUpsert = true });
+                await GetCollection<T>(collection).ReplaceOneAsync(d => d.Id == clone.Id, clone, new ReplaceOptions { IsUpsert = true });
+            }
+        }
+
+        /// <summary>
+        /// 保存实体对象到数据库（加锁）。
+        /// </summary>
+        /// <param name="filter">保存的条件表达式。</param>
+        /// <param name="entity">实体类型。</param>
+        /// <param name="collection">集合名称。</param>
+        /// <typeparam name="T"></typeparam>
+        public async FTask Save<T>(Expression<Func<T, bool>> filter, T? entity, string collection = null) where T : Entity, new()
+        {
+            if (entity == null)
+            {
+                Log.Error($"save entity is null: {typeof(T).Name}");
+                return;
+            }
+
+            T clone = _serializer.Clone(entity);
+
+            using (await _dataBaseLock.Wait(clone.Id))
+            {
+                await GetCollection<T>(collection).ReplaceOneAsync<T>(filter, clone, new ReplaceOptions { IsUpsert = true });
             }
         }
 
@@ -731,8 +765,7 @@ namespace Fantasy.DataBase
                 {
                     try
                     {
-                        await GetCollection(clone.GetType().Name).ReplaceOneAsync(d => d.Id == clone.Id, clone,
-                            new ReplaceOptions { IsUpsert = true });
+                        await GetCollection(clone.GetType().Name).ReplaceOneAsync(d => d.Id == clone.Id, clone, new ReplaceOptions { IsUpsert = true });
                     }
                     catch (Exception e)
                     {
@@ -752,9 +785,20 @@ namespace Fantasy.DataBase
         /// <typeparam name="T">实体类型。</typeparam>
         /// <param name="entity">要插入的实体对象。</param>
         /// <param name="collection">集合名称。</param>
-        public FTask Insert<T>(T entity, string collection = null) where T : Entity, new()
+        public async FTask Insert<T>(T? entity, string collection = null) where T : Entity, new()
         {
-            return Save(entity);
+            if (entity == null)
+            {
+                Log.Error($"insert entity is null: {typeof(T).Name}");
+                return;
+            }
+
+            var clone = _serializer.Clone(entity);
+            
+            using (await _dataBaseLock.Wait(entity.Id))
+            {
+                await GetCollection<T>(collection).InsertOneAsync(clone);
+            }
         }
 
         /// <summary>
@@ -767,7 +811,7 @@ namespace Fantasy.DataBase
         {
             using (await _dataBaseLock.Wait(RandomHelper.RandInt64() % DefaultTaskSize))
             {
-                await GetCollection<T>(collection ?? typeof(T).Name).InsertManyAsync(list);
+                await GetCollection<T>(collection).InsertManyAsync(list);
             }
         }
 
@@ -783,8 +827,21 @@ namespace Fantasy.DataBase
         {
             using (await _dataBaseLock.Wait(RandomHelper.RandInt64() % DefaultTaskSize))
             {
-                await GetCollection<T>(collection ?? typeof(T).Name)
-                    .InsertManyAsync((IClientSessionHandle)transactionSession, list);
+                await GetCollection<T>(collection).InsertManyAsync((IClientSessionHandle)transactionSession, list);
+            }
+        }
+        
+        /// <summary>
+        /// 插入BsonDocument到数据库（加锁）。
+        /// </summary>
+        /// <param name="bsonDocument"></param>
+        /// <param name="taskId"></param>
+        /// <typeparam name="T"></typeparam>
+        public async Task Insert<T>(BsonDocument bsonDocument, long taskId) where T : Entity
+        {
+            using (await _dataBaseLock.Wait(taskId))
+            {
+                await GetCollection<BsonDocument>(typeof(T).Name).InsertOneAsync(bsonDocument);
             }
         }
 
