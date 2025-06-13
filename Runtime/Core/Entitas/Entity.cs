@@ -6,7 +6,6 @@ using Fantasy.Pool;
 using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
 using ProtoBuf;
-
 // ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 // ReSharper disable MergeIntoPattern
 // ReSharper disable SuspiciousTypeConversion.Global
@@ -103,6 +102,11 @@ namespace Fantasy.Entitas
         {
             return Parent as T;
         }
+
+        /// <summary>
+        /// 获取当前实体的RouteId。
+        /// </summary>
+        public long RouteId => RuntimeId;
 
         #endregion
 
