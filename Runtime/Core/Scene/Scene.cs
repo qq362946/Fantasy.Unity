@@ -163,7 +163,11 @@ namespace Fantasy
             EntityPool = new EntityPool();
             EntityListPool = new EntityListPool<Entity>();
             EntitySortedDictionaryPool = new EntitySortedDictionaryPool<long, Entity>();
-            SceneUpdate = EntityComponent = await Create<EntityComponent>(this, false, false).Initialize();
+            EntityComponent = await Create<EntityComponent>(this, false, false).Initialize();
+            SceneUpdate = EntityComponent;
+#if FANTASY_UNITY
+            SceneLateUpdate = EntityComponent;
+#endif
             MessagePoolComponent = Create<MessagePoolComponent>(this,false,true);
             EventComponent = await Create<EventComponent>(this,false,true).Initialize();
             TimerComponent = Create<TimerComponent>(this, false, true).Initialize();
@@ -265,6 +269,7 @@ namespace Fantasy
 #elif FANTASY_UNITY
             Session = null;
             UnityNetwork = null;
+            SceneLateUpdate = null;
 #endif
             ThreadSynchronizationContext = null;
             SceneRuntimeType = SceneRuntimeType.None;
@@ -273,7 +278,6 @@ namespace Fantasy
         #endregion
 
         internal ISceneUpdate SceneUpdate { get; set; }
-
         internal void Update()
         {
             try
@@ -285,7 +289,20 @@ namespace Fantasy
                 Log.Error(e);
             }
         }
-
+#if FANTASY_UNITY
+        internal ISceneLateUpdate SceneLateUpdate { get; set; }
+        internal void LateUpdate()
+        {
+            try
+            {
+                SceneLateUpdate.LateUpdate();
+            }
+            catch (Exception e)
+            {
+                Log.Error(e);
+            }
+        }
+#endif
         #region Create
 
 #if FANTASY_UNITY || FANTASY_CONSOLE
@@ -379,7 +396,7 @@ namespace Fantasy
             if (sceneConfig.InnerPort != 0)
             {
                 // 创建内网网络服务器
-                scene.InnerNetwork = NetworkProtocolFactory.CreateServer(scene, ProcessDefine.InnerNetwork, NetworkTarget.Inner, machineConfig.InnerBindIP, sceneConfig.InnerPort);
+                scene.InnerNetwork = NetworkProtocolFactory.CreateServer(scene, ProgramDefine.InnerNetwork, NetworkTarget.Inner, machineConfig.InnerBindIP, sceneConfig.InnerPort);
             }
 
             if (sceneConfig.OuterPort != 0)
@@ -446,6 +463,9 @@ namespace Fantasy
                 {
                     scene.ThreadSynchronizationContext = ThreadScheduler.MainScheduler.ThreadSynchronizationContext;
                     scene.SceneUpdate = new EmptySceneUpdate();
+#if FANTASY_UNITY
+                    scene.SceneLateUpdate = new EmptySceneLateUpdate();
+#endif
                     ThreadScheduler.AddMainScheduler(scene);
                     await scene.Initialize();
                     break;
@@ -456,6 +476,9 @@ namespace Fantasy
                     scene.ThreadSynchronizationContext = new ThreadSynchronizationContext();
 #endif
                     scene.SceneUpdate = new EmptySceneUpdate();
+#if FANTASY_UNITY
+                    scene.SceneLateUpdate = new EmptySceneLateUpdate();
+#endif
                     ThreadScheduler.AddToMultiThreadScheduler(scene);
                     await scene.Initialize();
                     break;
@@ -466,6 +489,9 @@ namespace Fantasy
                     scene.ThreadSynchronizationContext = new ThreadSynchronizationContext();   
 #endif
                     scene.SceneUpdate = new EmptySceneUpdate();
+#if FANTASY_UNITY
+                    scene.SceneLateUpdate = new EmptySceneLateUpdate();
+#endif
                     ThreadScheduler.AddToThreadPoolScheduler(scene);
                     await scene.Initialize();
                     break;
@@ -567,7 +593,7 @@ namespace Fantasy
         /// <param name="runTimeId"></param>
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
-        public virtual Session GetSession(long runTimeId)
+        internal virtual Session GetSession(long runTimeId)
         {
             var sceneId = IdFactoryHelper.RuntimeIdTool.GetSceneId(ref runTimeId);
 
@@ -605,7 +631,7 @@ namespace Fantasy
             }
             
             var remoteAddress = $"{machineConfig.InnerBindIP}:{sceneConfig.InnerPort}";
-            var client = NetworkProtocolFactory.CreateClient(Scene, ProcessDefine.InnerNetwork, NetworkTarget.Inner);
+            var client = NetworkProtocolFactory.CreateClient(Scene, ProgramDefine.InnerNetwork, NetworkTarget.Inner);
             var session = client.Connect(remoteAddress, null, () =>
             {
                 Log.Error($"Unable to connect to the target server sourceServerId:{Scene.Process.Id} targetServerId:{sceneConfig.ProcessConfigId}");

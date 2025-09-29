@@ -1,4 +1,5 @@
 #if FANTASY_UNITY
+using System;
 using System.Linq;
 using Fantasy.Assembly;
 using Fantasy.Async;
@@ -52,6 +53,8 @@ namespace Fantasy.Platform.Unity
             }
             FantasyObject.OnRuntimeMethodLoad();
             Log.Register(new UnityLog());
+            ProgramDefine.MaxMessageSize = ushort.MaxValue * 16;
+            Log.Info($"Fantasy Version:{ProgramDefine.VERSION}");
             await AssemblySystem.InnerInitialize(assemblies);
             // 初始化序列化
             SerializerManager.Initialize();
@@ -84,6 +87,11 @@ namespace Fantasy.Platform.Unity
         private void Update()
         {
             ThreadScheduler.Update();
+        }
+
+        private void LateUpdate()
+        {
+            ThreadScheduler.LateUpdate();
         }
 
         private void OnDestroy()

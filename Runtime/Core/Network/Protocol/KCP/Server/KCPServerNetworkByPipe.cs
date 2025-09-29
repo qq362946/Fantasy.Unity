@@ -23,7 +23,7 @@ using Fantasy.Network.Interface;
 
 namespace Fantasy.Network.KCP
 {
-    public sealed class KCPServerNetworkUpdateSystem : UpdateSystem<KCPServerNetwork>
+    internal sealed class KCPServerNetworkUpdateSystem : UpdateSystem<KCPServerNetwork>
     {
         protected override void Update(KCPServerNetwork self)
         {
@@ -31,7 +31,7 @@ namespace Fantasy.Network.KCP
         }
     }
 
-    public struct PendingConnection
+    internal struct PendingConnection
     {
         public readonly uint ChannelId;
         public readonly uint TimeOutId;
@@ -98,42 +98,33 @@ namespace Fantasy.Network.KCP
                 return;
             }
 
-            try
+            if (!_cancellationTokenSource.IsCancellationRequested)
             {
-                if (!_cancellationTokenSource.IsCancellationRequested)
+                try
                 {
-                    try
-                    {
-                        _cancellationTokenSource.Cancel();
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // 通常情况下，此处的异常可以忽略
-                    }
+                    _cancellationTokenSource.Cancel();
                 }
-
-                foreach (var (_, channel) in _connectionChannel.ToArray())
+                catch (OperationCanceledException)
                 {
-                    channel.Dispose();
-                }
-
-                _connectionChannel.Clear();
-                _pendingConnection.Clear();
-
-                if (_socket != null)
-                {
-                    _socket.Dispose();
-                    _socket = null;
+                    // 通常情况下，此处的异常可以忽略
                 }
             }
-            catch (Exception e)
+
+            foreach (var (_, channel) in _connectionChannel.ToArray())
             {
-                Log.Error(e);
+                channel.Dispose();
             }
-            finally
+
+            _connectionChannel.Clear();
+            _pendingConnection.Clear();
+
+            if (_socket != null)
             {
-                base.Dispose();
+                _socket.Dispose();
+                _socket = null;
             }
+
+            base.Dispose();
         }
 
         #region ReceiveSocket
@@ -397,7 +388,7 @@ namespace Fantasy.Network.KCP
                 {
                     continue;
                 }
-
+                
                 if (channel.IsDisposed)
                 {
                     _connectionChannel.Remove(channelId);
