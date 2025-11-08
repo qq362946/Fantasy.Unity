@@ -12,12 +12,12 @@ using MongoDB.Driver;
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
-namespace Fantasy.DataBase
+namespace Fantasy.Database
 {
     /// <summary>
     /// 使用 MongoDB 数据库的实现。
     /// </summary>
-    public sealed class MongoDataBase : IDataBase
+    public sealed partial class MongoDatabase : IDatabase
     {
         private const int DefaultTaskSize = 1024;
         private Scene _scene;
@@ -29,11 +29,16 @@ namespace Fantasy.DataBase
         /// <summary>
         /// 获得当前数据的类型
         /// </summary>
-        public DataBaseType GetDataBaseType { get; } = DataBaseType.MongoDB;
+        public DatabaseType DatabaseType { get; } = DatabaseType.MongoDB;
+        /// <summary>
+        /// 数据库名字
+        /// </summary>
+        public string Name { get; private set; }
+
         /// <summary>
         /// 获得对应数据的操作实例
         /// </summary>
-        public object GetDataBaseInstance => _mongoDatabase;
+        public object GetDatabaseInstance => _mongoDatabase;
         /// <summary>
         /// 初始化 MongoDB 数据库连接并记录所有集合名。
         /// </summary>
@@ -41,20 +46,31 @@ namespace Fantasy.DataBase
         /// <param name="connectionString">数据库连接字符串。</param>
         /// <param name="dbName">数据库名称。</param>
         /// <returns>初始化后的数据库实例。</returns>
-        public IDataBase Initialize(Scene scene, string connectionString, string dbName)
+        public IDatabase Initialize(Scene scene, string connectionString, string dbName)
         {
-            _scene = scene;
-            _mongoClient = DataBaseSetting.MongoDBCustomInitialize != null
-                ? DataBaseSetting.MongoDBCustomInitialize(new DataBaseCustomConfig()
-                {
-                    Scene = scene, ConnectionString = connectionString, DBName = dbName
-                })
-                : new MongoClient(connectionString);
-            _mongoDatabase = _mongoClient.GetDatabase(dbName);
-            _dataBaseLock = scene.CoroutineLockComponent.Create(GetType().TypeHandle.Value.ToInt64());
-            // 记录所有集合名
-            _collections.UnionWith(_mongoDatabase.ListCollectionNames().ToList());
-            _serializer = SerializerManager.GetSerializer(FantasySerializerType.Bson);
+            try
+            {
+                Log.Info($"dbName:{dbName} Initialize the db database and connect to the target.");
+                _scene = scene;
+                _mongoClient = DataBaseSetting.MongoDbCustomInitialize != null
+                    ? DataBaseSetting.MongoDbCustomInitialize(new DataBaseCustomConfig()
+                    {
+                        Scene = scene, ConnectionString = connectionString, DBName = dbName
+                    })
+                    : new MongoClient(connectionString);
+                Name = dbName;
+                _mongoDatabase = _mongoClient.GetDatabase(dbName);
+                _dataBaseLock = scene.CoroutineLockComponent.Create(GetType().TypeHandle.Value.ToInt64());
+                // 记录所有集合名
+                _collections.UnionWith(_mongoDatabase.ListCollectionNames().ToList());
+                _serializer = SerializerManager.GetSerializer(FantasySerializerType.Bson);
+                Log.Info($"dbName:{dbName} Database connection successful.");
+            }
+            catch (Exception e)
+            {
+                Log.Error($"dbName:{dbName} cannot connect to the database. Please check if the connectionString is correct or the network conditions.\n{e.Message}");
+            }
+            
             return this;
         }
         
@@ -66,6 +82,7 @@ namespace Fantasy.DataBase
             // 优先释放协程锁。
             _dataBaseLock.Dispose();
             // 清理资源。
+            Name = null;
             _scene = null;
             _serializer = null;
             _mongoDatabase = null;

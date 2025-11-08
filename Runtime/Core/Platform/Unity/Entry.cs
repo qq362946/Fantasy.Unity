@@ -43,21 +43,19 @@ namespace Fantasy.Platform.Unity
         /// <summary>
         /// 初始化框架
         /// </summary>
-        /// <param name="assemblies"></param>
-        public static async FTask Initialize(params System.Reflection.Assembly[] assemblies)
+        public static async FTask Initialize()
         {
             if (_isInit)
             {
                 Log.Error("Fantasy has already been initialized and does not need to be initialized again!");
                 return;
             }
+            Log.Initialize(new UnityLog());
             FantasyObject.OnRuntimeMethodLoad();
-            Log.Register(new UnityLog());
             ProgramDefine.MaxMessageSize = ushort.MaxValue * 16;
             Log.Info($"Fantasy Version:{ProgramDefine.VERSION}");
-            await AssemblySystem.InnerInitialize(assemblies);
             // 初始化序列化
-            SerializerManager.Initialize();
+            await SerializerManager.Initialize();
 #if FANTASY_WEBGL
             ThreadSynchronizationContext.Initialize();
 #endif
@@ -96,13 +94,18 @@ namespace Fantasy.Platform.Unity
 
         private void OnDestroy()
         {
-            AssemblySystem.Dispose();
-            SerializerManager.Dispose();
+            OnDestroyAsync().Coroutine();
+        }
+
+        private async FTask OnDestroyAsync()
+        {
             if (Scene != null)
             {
-                Scene?.Dispose();
+                await Scene.Close();
                 Scene = null;
             }
+            SerializerManager.Dispose();
+            await AssemblyManifest.Dispose();
             _isInit = false;
         }
     }

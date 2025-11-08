@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Fantasy.Async;
 using Fantasy.Entitas;
@@ -11,12 +12,14 @@ using Fantasy.Pool;
 using Fantasy.Scheduler;
 using Fantasy.Timer;
 #if FANTASY_NET
-using Fantasy.DataBase;
+using Fantasy.Database;
 using Fantasy.Platform.Net;
-using Fantasy.SingleCollection;
+using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using Fantasy.Network.Route;
 using Fantasy.Network.Roaming;
+using Fantasy.SeparateTable;
+using Fantasy.Sphere;
 #endif
 // ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 #pragma warning disable CS8601 // Possible null reference assignment.
@@ -49,6 +52,8 @@ namespace Fantasy
     /// <summary>
     /// 表示一个场景实体，用于创建与管理特定的游戏场景信息。
     /// </summary>
+    [SuppressMessage("Compiler", "CS8618:Non-nullable field must contain a non-null value when exiting constructor. Consider adding the \'required\' modifier or declaring as nullable.")]
+    [SuppressMessage("Compiler", "CS8618:Non-nullable field must contain a non-null value when exiting constructor. Consider adding the \'required\' modifier or declaring as nullable.")]
     public partial class Scene : Entity
     {
         #region Members
@@ -75,7 +80,10 @@ namespace Fantasy
         public uint SceneConfigId { get; protected set; }
         internal ANetwork InnerNetwork { get; private set; }
         internal ANetwork OuterNetwork { get; private set; }
-        internal SceneConfig SceneConfig => SceneConfigData.Instance.Get(SceneConfigId);
+        /// <summary>
+        /// 获取Scene对应的SceneConfig
+        /// </summary>
+        public SceneConfig SceneConfig => SceneConfigData.Instance.Get(SceneConfigId);
         private readonly Dictionary<uint, ProcessSessionInfo> _processSessionInfos = new Dictionary<uint, ProcessSessionInfo>();
 #endif
         /// <summary>
@@ -86,7 +94,7 @@ namespace Fantasy
         /// 当前Scene的下创建的Entity
         /// </summary>
         private readonly Dictionary<long, Entity> _entities = new Dictionary<long, Entity>();
-        internal readonly Dictionary<Type, Func<IPool>> TypeInstance = new Dictionary<Type, Func<IPool>>();
+        internal readonly Dictionary<RuntimeTypeHandle, Func<IPool>> TypeInstance = new Dictionary<RuntimeTypeHandle, Func<IPool>>();
         #endregion
 
         #region IdFactory
@@ -140,7 +148,7 @@ namespace Fantasy
         /// <summary>
         /// Scene下的Entity分表组件
         /// </summary>
-        public SingleCollectionComponent SingleCollectionComponent { get; internal set; }
+        public SeparateTableComponent SeparateTableComponent { get; internal set; }
         /// <summary>
         /// Scene下的内网消息发送组件
         /// </summary>
@@ -153,6 +161,10 @@ namespace Fantasy
         /// Scene下的Session漫游组件
         /// </summary>
         public RoamingComponent RoamingComponent { get; internal set; }
+        /// <summary>
+        /// Scene下的领域事件组件
+        /// </summary>
+        public SphereEventComponent SphereEventComponent  { get; internal set; }
 #endif
         #endregion
 
@@ -175,10 +187,23 @@ namespace Fantasy
             MessageDispatcherComponent = await Create<MessageDispatcherComponent>(this, false, true).Initialize();
 #if FANTASY_NET
             NetworkMessagingComponent = Create<NetworkMessagingComponent>(this, false, true);
-            SingleCollectionComponent = await Create<SingleCollectionComponent>(this, false, true).Initialize();
+            SeparateTableComponent = await Create<SeparateTableComponent>(this, false, true).Initialize();
             TerminusComponent = Create<TerminusComponent>(this, false, true);
             RoamingComponent = Create<RoamingComponent>(this, false, true).Initialize();
+            SphereEventComponent = await Create<SphereEventComponent>(this, false, true).Initialize();
 #endif
+        }
+        
+        /// <summary>
+        /// Scene的关闭方法
+        /// </summary>
+        public async FTask Close()
+        {
+#if FANTASY_NET
+            await SphereEventComponent?.Close();
+#endif
+            await FTask.CompletedTask;
+            Dispose();
         }
 
         /// <summary>
@@ -225,7 +250,7 @@ namespace Fantasy
                     TypeInstance.Clear();
 #if FANTASY_NET
                     Process.RemoveScene(this, false);
-                    Process.RemoveSceneToProcess(this, false);
+                    Process.RemoveSceneToProcess(this);
 #endif
                     EntityComponent.Dispose();
                     EntityPool.Dispose();
@@ -262,10 +287,11 @@ namespace Fantasy
             Process = null;
             SceneType = 0;
             SceneConfigId = 0;
-            SingleCollectionComponent = null;
+            SeparateTableComponent = null;
             NetworkMessagingComponent = null;
             TerminusComponent = null;
             RoamingComponent = null;
+            SphereEventComponent = null;
 #elif FANTASY_UNITY
             Session = null;
             UnityNetwork = null;
@@ -340,7 +366,7 @@ namespace Fantasy
             scene.EntityIdFactory =  IdFactoryHelper.EntityIdFactory(sceneId, world);
             scene.RuntimeIdFactory = IdFactoryHelper.RuntimeIdFactory(0, sceneId, world);
             scene.Id = IdFactoryHelper.EntityId(0, sceneId, world, 0);
-            scene.RuntimeId = IdFactoryHelper.RuntimeId(0, sceneId, world, 0);
+            scene.RuntimeId = IdFactoryHelper.RuntimeId(false, 0, sceneId, world, 0);
             scene.AddEntity(scene);
             await SetScheduler(scene, sceneRuntimeMode);
             scene.ThreadSynchronizationContext.Post(() =>
@@ -368,9 +394,9 @@ namespace Fantasy
             scene.Process = process;
             scene.SceneRuntimeType = SceneRuntimeType.Root;
             scene.EntityIdFactory = IdFactoryHelper.EntityIdFactory(sceneConfigId, worldId);
-            scene.RuntimeIdFactory = IdFactoryHelper.RuntimeIdFactory(0,sceneConfigId, worldId);
+            scene.RuntimeIdFactory = IdFactoryHelper.RuntimeIdFactory(0, sceneConfigId, worldId);
             scene.Id = IdFactoryHelper.EntityId(0, sceneConfigId, worldId, 0);
-            scene.RuntimeId = IdFactoryHelper.RuntimeId(0, sceneConfigId, worldId, 0);
+            scene.RuntimeId = IdFactoryHelper.RuntimeId(false, 0, sceneConfigId, worldId, 0);
             scene.AddEntity(scene);
             return scene;
         }
@@ -443,7 +469,7 @@ namespace Fantasy
             scene.EntityIdFactory = parentScene.EntityIdFactory;
             scene.RuntimeIdFactory = parentScene.RuntimeIdFactory;
             scene.Id = scene.EntityIdFactory.Create;
-            scene.RuntimeId = scene.RuntimeIdFactory.Create;
+            scene.RuntimeId = scene.RuntimeIdFactory.Create(false);
             scene.AddEntity(scene);
             scene.Initialize(parentScene);
             scene.ThreadSynchronizationContext.Post(() => OnEvent().Coroutine());
@@ -638,6 +664,50 @@ namespace Fantasy
             }, null, false);
             _processSessionInfos.Add(sceneId, new ProcessSessionInfo(session, client));
             return session;
+        }
+#endif
+        #endregion
+
+        #region SceneType
+#if FANTASY_NET
+        
+        /// <summary>
+        /// SceneType字符串字典，key为SceneType的字符串名字，value为对应的索引
+        /// </summary>
+        public static FrozenDictionary<string, int> SceneTypeDictionary { get; internal set; }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="routeId"></param>
+        /// <param name="message"></param>
+        /// <typeparam name="T"></typeparam>
+        public void Send<T>(long routeId, T message) where T : IRouteMessage
+        {
+            NetworkMessagingComponent.SendInnerRoute<T>(routeId, message);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="routeIdCollection"></param>
+        /// <param name="message"></param>
+        /// <typeparam name="T"></typeparam>
+        public void Send<T>(ICollection<long> routeIdCollection, T message) where T : IRouteMessage
+        {
+            NetworkMessagingComponent.SendInnerRoute<T>(routeIdCollection, message);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="routeId"></param>
+        /// <param name="request"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public FTask<IResponse> Call<T>(long routeId, T request) where T : IRouteRequest
+        {
+            return NetworkMessagingComponent.CallInnerRoute<T>(routeId, request);
         }
 #endif
         #endregion

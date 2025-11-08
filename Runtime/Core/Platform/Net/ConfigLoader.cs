@@ -6,6 +6,7 @@ using Fantasy.Helper;
 using Fantasy.IdFactory;
 using Fantasy.Network;
 using Fantasy.Platform.Net;
+// ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 
 namespace Fantasy;
 
@@ -32,12 +33,9 @@ public static class ConfigLoader
         }
         
         // 创建命名空间管理器
-        
         var nsManager = new XmlNamespaceManager(doc.NameTable);
         nsManager.AddNamespace("f", "http://fantasy.net/config");
-        
         // 加载运行时配置
-        
         LoadRuntimeConfig(root, nsManager);
         
         var configTableNode = root.SelectSingleNode("f:configTable", nsManager);
@@ -51,7 +49,7 @@ public static class ConfigLoader
             await LoadJsonConfig(configTablePath);
             return;
         }
-        
+
         var serverNode = root.SelectSingleNode("f:server", nsManager);
         if (serverNode == null)
         {
@@ -99,10 +97,10 @@ public static class ConfigLoader
             throw new InvalidOperationException($"SceneConfigData.Json not found in the {sceneConfigFullPath} directory");
         }
 
-        MachineConfigData.Initialize(await File.ReadAllTextAsync(machineConfigFullPath, Encoding.UTF8));
-        ProcessConfigData.Initialize(await File.ReadAllTextAsync(processConfigFullPath, Encoding.UTF8));
-        WorldConfigData.Initialize(await File.ReadAllTextAsync(worldConfigFullPath, Encoding.UTF8));
-        SceneConfigData.Initialize(await File.ReadAllTextAsync(sceneConfigFullPath, Encoding.UTF8));
+        MachineConfigData.InitializeFromJson(await File.ReadAllTextAsync(machineConfigFullPath, Encoding.UTF8));
+        ProcessConfigData.InitializeFromJson(await File.ReadAllTextAsync(processConfigFullPath, Encoding.UTF8));
+        WorldConfigData.InitializeFromJson(await File.ReadAllTextAsync(worldConfigFullPath, Encoding.UTF8));
+        SceneConfigData.InitializeFromJson(await File.ReadAllTextAsync(sceneConfigFullPath, Encoding.UTF8));
         
         // 验证所有配置的完整性和正确性
         CheckConfig();
@@ -186,19 +184,40 @@ public static class ConfigLoader
         }
         
         var worldList = new List<WorldConfig>();
+
+        // 解析world和所有database
         foreach (XmlNode worldNode in worldNodes)
         {
-            var world = new WorldConfig
+            var id = uint.Parse(GetRequiredAttribute(worldNode, "id"));
+            var worldName = GetRequiredAttribute(worldNode, "worldName");
+            var databaseNodes = GetChildNodes(worldNode, "f:database", nsManager);
+            
+            var worldConfig = new WorldConfig
             {
-                Id = uint.Parse(GetRequiredAttribute(worldNode, "id")),
-                WorldName = GetRequiredAttribute(worldNode, "worldName"),
-                DbConnection = GetOptionalAttribute(worldNode, "dbConnection") ?? string.Empty,
-                DbName = GetRequiredAttribute(worldNode, "dbName"),
-                DbType = GetRequiredAttribute(worldNode, "dbType")
+                Id = id,
+                WorldName = worldName
             };
-            worldList.Add(world);
+
+            var index = 0;
+            worldConfig.DatabaseConfig = new DatabaseConfig[databaseNodes.Count];
+            foreach (XmlNode dbNode in databaseNodes)
+            {
+                var dbConnection = GetOptionalAttribute(dbNode, "dbConnection");
+                var dbType = GetRequiredAttribute(dbNode, "dbType");
+                var dbName = GetRequiredAttribute(dbNode, "dbName");
+
+                if (string.IsNullOrWhiteSpace(dbConnection))
+                {
+                    // Log.Warning($"(Fantasy.config) \"DbConnection\" is empty, thus the database-config \"{dbName}({dbType})\" in {worldName} (World Id: {id}) will be ignoured.");
+                    dbConnection = string.Empty; 
+                }
+                
+                worldConfig.DatabaseConfig[index++] = new DatabaseConfig(dbConnection, dbName, dbType);
+            }
+            
+            worldList.Add(worldConfig);
         }
-        
+
         WorldConfigData.Initialize(worldList);
     }
 
@@ -228,23 +247,37 @@ public static class ConfigLoader
                 SceneTypeString = GetRequiredAttribute(sceneNode, "sceneTypeString"),
                 NetworkProtocol = GetOptionalAttribute(sceneNode, "networkProtocol") ?? string.Empty,
                 OuterPort = int.Parse(GetOptionalAttribute(sceneNode, "outerPort") ?? "0"),
-                InnerPort = int.Parse(GetRequiredAttribute(sceneNode, "innerPort")),
-                SceneType = int.Parse(GetRequiredAttribute(sceneNode, "sceneType"))
+                InnerPort = int.Parse(GetRequiredAttribute(sceneNode, "innerPort"))
             };
+            scene.SceneType = Scene.SceneTypeDictionary[scene.SceneTypeString];
             sceneList.Add(scene);
         }
         
         SceneConfigData.Initialize(sceneList);
     }
-    
+
+    /// <summary>
+    /// 获取必填的属性
+    /// </summary>
     private static string GetRequiredAttribute(XmlNode node, string attributeName)
     {
         return node.Attributes?[attributeName]?.Value ?? throw new InvalidOperationException($"Required attribute '{attributeName}' is missing or null");
     }
 
+    /// <summary>
+    /// 获取可选的属性
+    /// </summary>
     private static string? GetOptionalAttribute(XmlNode? node, string attributeName)
     {
         return node?.Attributes?[attributeName]?.Value;
+    }
+
+    /// <summary>
+    /// 获取 XMl 父节点下所有指定名称的子节点
+    /// </summary>
+    private static XmlNodeList GetChildNodes(XmlNode parentNode, string childNodeName, XmlNamespaceManager nsManager)
+    {
+        return parentNode.SelectNodes(childNodeName, nsManager) ?? throw new InvalidOperationException($"No child nodes named '{childNodeName}' found under parent node");
     }
 
     #endregion
@@ -342,15 +375,27 @@ public static class ConfigLoader
             {
                 throw new InvalidOperationException($"World {world.Id}: WorldName cannot be null or empty");
             }
-            
-            if (string.IsNullOrWhiteSpace(world.DbName))
+
+            if (world.DatabaseConfig != null)
             {
-                throw new InvalidOperationException($"World {world.Id}: DbName cannot be null or empty");
-            }
-            
-            if (string.IsNullOrWhiteSpace(world.DbType))
-            {
-                throw new InvalidOperationException($"World {world.Id}: DbType cannot be null or empty");
+                var dbNames = new HashSet<string>();
+                foreach (var databaseConfig in world.DatabaseConfig)
+                {
+                    if (databaseConfig.DbName == null)
+                    {
+                        throw new InvalidOperationException($"World {world.Id}: DbName config has no value");
+                    }
+
+                    if (databaseConfig.DbType == null)
+                    {
+                        throw new InvalidOperationException($"World {world.Id}: DbType config has no value");
+                    }
+
+                    if (!dbNames.Add(databaseConfig.DbName))
+                    {
+                        throw new InvalidOperationException($"World {world.Id} configuration DbName:{databaseConfig.DbName} repeat");
+                    }
+                }
             }
         }
     }
@@ -526,10 +571,10 @@ public static class ConfigLoader
         ProgramDefine.SessionIdleCheckerTimeout = int.Parse(GetOptionalAttribute(sessionNode, "idleTimeout") ?? "8000");
         ProgramDefine.SessionIdleCheckerInterval = int.Parse(GetOptionalAttribute(sessionNode, "idleInterval") ?? "5000");
         
-        Log.Info($"Current inner network protocol {ProgramDefine.InnerNetwork.ToString()}");
-        Log.Info($"Max Message Size(byte) {ProgramDefine.MaxMessageSize}");
-        Log.Info($"Current session idle timeout {ProgramDefine.SessionIdleCheckerTimeout}");
-        Log.Info($"Session-check interval {ProgramDefine.SessionIdleCheckerInterval} ");
+        Log.Info($"Current inner network protocol:{ProgramDefine.InnerNetwork.ToString()}");
+        Log.Info($"Max Message Size(byte):{ProgramDefine.MaxMessageSize}");
+        Log.Info($"Current session idle timeout:{ProgramDefine.SessionIdleCheckerTimeout}");
+        Log.Info($"Session-check interval:{ProgramDefine.SessionIdleCheckerInterval} ");
     }
 
     #endregion

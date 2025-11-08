@@ -1,23 +1,30 @@
 #if FANTASY_NET || FANTASY_EXPORTER
 using System.Buffers;
+#if !FANTASY_EXPORTER
 using Fantasy.Assembly;
+using Fantasy.Async;
+#endif
 using ProtoBuf.Meta;
 namespace Fantasy.Serialize
 {
     /// <summary>
     /// ProtoBufP帮助类，Net平台使用
     /// </summary>
+#if FANTASY_EXPORTER
     public sealed class ProtoBufPackHelper : ISerialize
+#endif
+#if FANTASY_NET
+    public sealed class ProtoBufPackHelper : ISerialize, IAssemblyLifecycle
+#endif
     {
         /// <summary>
         /// 序列化器的名字
         /// </summary>
         public string SerializeName { get; } = "ProtoBuf";
-        
-        /// <summary>
-        /// 构造函数
-        /// </summary>
-        public ProtoBufPackHelper ()
+
+        #region AssemblyManifest
+#if !FANTASY_EXPORTER
+        internal async FTask<ProtoBufPackHelper> Initialize()
         {
 #if FANTASY_NET
             RuntimeTypeModel.Default.AutoAddMissingTypes = true;
@@ -26,15 +33,39 @@ namespace Fantasy.Serialize
             RuntimeTypeModel.Default.AutoCompile = true;
             RuntimeTypeModel.Default.UseImplicitZeroDefaults = true;
             RuntimeTypeModel.Default.InferTagFromNameDefault = true;
-            
-            foreach (var type in AssemblySystem.ForEach(typeof(IProto)))
-            {
-                RuntimeTypeModel.Default.Add(type, true);
-            }
-
-            RuntimeTypeModel.Default.CompileInPlace();
 #endif
+            await AssemblyLifecycle.Add(this);
+            return this;
         }
+#endif
+#if !FANTASY_EXPORTER
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="assemblyManifest">程序集清单对象，包含程序集的元数据和注册器</param>
+        public async FTask OnLoad(AssemblyManifest assemblyManifest)
+        {
+            var protoBufTypes = assemblyManifest.NetworkProtocolRegistrar.GetNetworkProtocolTypes();
+            if (protoBufTypes.Any())
+            {
+                foreach (var protoBufType in protoBufTypes)
+                {
+                    RuntimeTypeModel.Default.Add(protoBufType, true);
+                }
+                RuntimeTypeModel.Default.CompileInPlace();
+            }
+            await FTask.CompletedTask;
+        }
+         /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="assemblyManifest">程序集清单对象，包含程序集的元数据和注册器</param>
+        public async FTask OnUnload(AssemblyManifest assemblyManifest)
+        {
+            await FTask.CompletedTask;
+        }
+#endif
+        #endregion
 
         /// <summary>
         /// 使用ProtoBuf反序列化数据到实例

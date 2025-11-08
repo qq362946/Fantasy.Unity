@@ -1,129 +1,105 @@
 using System;
-using System.Reflection;
+using System.Collections.Generic;
 using Fantasy.Assembly;
 using Fantasy.Async;
 using Fantasy.DataStructure.Collection;
 using Fantasy.Entitas;
-
-// ReSharper disable PossibleMultipleEnumeration
-#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
-#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 // ReSharper disable MethodOverloadWithOptionalParameter
 
 namespace Fantasy.Event
 {
-    internal sealed class EventCache
+    /// <summary>
+    /// 事件组件系统，负责管理和调度所有事件
+    /// </summary>
+    public sealed class EventComponent : Entity, IAssemblyLifecycle
     {
-        public readonly Type EnventType;
-        public readonly object Obj;
-        public EventCache(Type enventType, object obj)
+        private readonly HashSet<long> _assemblyManifests = new();
+        private readonly OneToManyList<RuntimeTypeHandle, IEvent> _events = new();
+        private readonly OneToManyList<RuntimeTypeHandle, IEvent> _asyncEvents = new();
+
+        /// <summary>
+        /// 销毁时会清理组件里的所有数据
+        /// </summary>
+        public override void Dispose()
         {
-            EnventType = enventType;
-            Obj = obj;
+            if (IsDisposed)
+            {
+                return;
+            }
+            
+            _assemblyManifests.Clear();
+            _events.Clear();
+            _asyncEvents.Clear();
+            AssemblyLifecycle.Remove(this);
+            base.Dispose();
         }
-    }
 
-    public sealed class EventComponent : Entity, IAssembly
-    {
-        private readonly OneToManyList<Type, IEvent> _events = new();
-        private readonly OneToManyList<Type, IAsyncEvent> _asyncEvents = new();
-        private readonly OneToManyList<long, EventCache> _assemblyEvents = new();
-        private readonly OneToManyList<long, EventCache> _assemblyAsyncEvents = new();
+        #region AssemblyManifest
 
+        /// <summary>
+        /// 初始化EventComponent，将其注册到程序集系统中
+        /// </summary>
+        /// <returns>返回初始化后的EventComponent实例</returns>
         internal async FTask<EventComponent> Initialize()
         {
-            await AssemblySystem.Register(this);
+            await AssemblyLifecycle.Add(this);
             return this;
         }
-
-        #region Assembly
-
-        public async FTask Load(long assemblyIdentity)
+        
+        /// <summary>
+        /// 加载程序集，注册该程序集中的所有事件系统
+        /// 支持热重载：如果程序集已加载，会先卸载再重新加载
+        /// </summary>
+        /// <param name="assemblyManifest">程序集清单对象，包含程序集的元数据和注册器</param>
+        /// <returns>异步任务</returns>
+        public async FTask OnLoad(AssemblyManifest assemblyManifest)
         {
             var tcs = FTask.Create(false);
+            var assemblyManifestId = assemblyManifest.AssemblyManifestId;
             Scene?.ThreadSynchronizationContext.Post(() =>
             {
-                LoadInner(assemblyIdentity);
-                tcs.SetResult();
-            });
-            await tcs;
-        }
-
-        public async FTask ReLoad(long assemblyIdentity)
-        {
-            var tcs = FTask.Create(false);
-            Scene?.ThreadSynchronizationContext.Post(() =>
-            {
-                OnUnLoadInner(assemblyIdentity);
-                LoadInner(assemblyIdentity);
-                tcs.SetResult();
-            });
-            await tcs;
-        }
-
-        public async FTask OnUnLoad(long assemblyIdentity)
-        {
-            var tcs = FTask.Create(false);
-            Scene?.ThreadSynchronizationContext.Post(() =>
-            {
-                OnUnLoadInner(assemblyIdentity);
-                tcs.SetResult();
-            });
-            await tcs;
-        }
-
-        private void LoadInner(long assemblyIdentity)
-        {
-            foreach (var type in AssemblySystem.ForEach(assemblyIdentity, typeof(IEvent)))
-            {
-                var @event = (IEvent)Activator.CreateInstance(type);
-
-                if (@event == null)
+                // 如果程序集已加载，先卸载旧的
+                if (_assemblyManifests.Contains(assemblyManifestId))
                 {
-                    continue;
+                    OnUnLoadInner(assemblyManifest);
                 }
                 
-                var eventType = @event.EventType();
-                _events.Add(eventType, @event);
-                _assemblyEvents.Add(assemblyIdentity, new EventCache(eventType, @event));
-            }
-
-            foreach (var type in AssemblySystem.ForEach(assemblyIdentity, typeof(IAsyncEvent)))
-            {
-                var @event = (IAsyncEvent)Activator.CreateInstance(type);
-
-                if (@event == null)
-                {
-                    continue;
-                }
-                
-                var eventType = @event.EventType();
-                _asyncEvents.Add(eventType, @event);
-                _assemblyAsyncEvents.Add(assemblyIdentity, new EventCache(eventType, @event));
-            }
+                assemblyManifest.EventSystemRegistrar.Register(
+                    _events,
+                    _asyncEvents);
+                _assemblyManifests.Add(assemblyManifestId);
+                tcs.SetResult();
+            });
+            await tcs;
         }
-
-        private void OnUnLoadInner(long assemblyIdentity)
+        
+        /// <summary>
+        /// 卸载程序集，取消注册该程序集中的所有实体系统
+        /// </summary>
+        /// <param name="assemblyManifest">程序集清单对象，包含程序集的元数据和注册器</param>
+        /// <returns>异步任务</returns>
+        public async FTask OnUnload(AssemblyManifest assemblyManifest)
         {
-            if (_assemblyEvents.TryGetValue(assemblyIdentity, out var events))
+            var tcs = FTask.Create(false);
+            Scene?.ThreadSynchronizationContext.Post(() =>
             {
-                foreach (var @event in events)
-                {
-                    _events.RemoveValue(@event.EnventType, (IEvent)@event.Obj);
-                }
-
-                _assemblyEvents.RemoveByKey(assemblyIdentity);
-            }
-
-            if (_assemblyAsyncEvents.TryGetValue(assemblyIdentity, out var asyncEvents))
-            {
-                foreach (var @event in asyncEvents)
-                {
-                    _asyncEvents.RemoveValue(@event.EnventType, (IAsyncEvent)@event.Obj);
-                }
-
-                _assemblyAsyncEvents.RemoveByKey(assemblyIdentity);
-            }
+                OnUnLoadInner(assemblyManifest);
+                tcs.SetResult();
+            });
+            await tcs;
+        }
+        
+        /// <summary>
+        /// 卸载程序集的内部实现
+        /// 会清理该程序集注册的所有系统
+        /// </summary>
+        /// <param name="assemblyManifest">程序集清单对象，包含程序集的元数据和注册器</param>
+        private void OnUnLoadInner(AssemblyManifest assemblyManifest)
+        {
+            assemblyManifest.EventSystemRegistrar.UnRegister(
+                _events,
+                _asyncEvents);
+            _assemblyManifests.Remove(assemblyManifest.AssemblyManifestId);
         }
 
         #endregion
@@ -131,13 +107,13 @@ namespace Fantasy.Event
         #region Publish
 
         /// <summary>
-        /// 发布一个值类型的事件数据。
+        /// 发布同步事件（struct类型）
         /// </summary>
-        /// <typeparam name="TEventData">事件数据类型（值类型）。</typeparam>
-        /// <param name="eventData">事件数据实例。</param>
+        /// <typeparam name="TEventData">事件数据类型（值类型）</typeparam>
+        /// <param name="eventData">事件数据</param>
         public void Publish<TEventData>(TEventData eventData) where TEventData : struct
         {
-            if (!_events.TryGetValue(typeof(TEventData), out var list))
+            if (!_events.TryGetValue(typeof(TEventData).TypeHandle, out var list))
             {
                 return;
             }
@@ -146,7 +122,7 @@ namespace Fantasy.Event
             {
                 try
                 {
-                    @event.Invoke(eventData);
+                    ((IEvent<TEventData>)@event).Invoke(eventData);
                 }
                 catch (Exception e)
                 {
@@ -156,14 +132,14 @@ namespace Fantasy.Event
         }
 
         /// <summary>
-        /// 发布一个继承自 Entity 的事件数据。
+        /// 发布同步事件（Entity类型）
         /// </summary>
-        /// <typeparam name="TEventData">事件数据类型（继承自 Entity）。</typeparam>
-        /// <param name="eventData">事件数据实例。</param>
-        /// <param name="isDisposed">是否释放事件数据。</param>
+        /// <typeparam name="TEventData">事件数据类型（Entity类型）</typeparam>
+        /// <param name="eventData">事件数据</param>
+        /// <param name="isDisposed">事件处理完成后是否自动销毁Entity</param>
         public void Publish<TEventData>(TEventData eventData, bool isDisposed = true) where TEventData : Entity
         {
-            if (!_events.TryGetValue(typeof(TEventData), out var list))
+            if (!_events.TryGetValue(typeof(TEventData).TypeHandle, out var list))
             {
                 return;
             }
@@ -172,65 +148,14 @@ namespace Fantasy.Event
             {
                 try
                 {
-                    @event.Invoke(eventData);
+                    // 转换为泛型接口，Entity是引用类型但仍避免虚方法调用开销
+                    ((IEvent<TEventData>)@event).Invoke(eventData);
                 }
                 catch (Exception e)
                 {
                     Log.Error(e);
                 }
             }
-
-            if (isDisposed)
-            {
-                eventData.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// 异步发布一个值类型的事件数据。
-        /// </summary>
-        /// <typeparam name="TEventData">事件数据类型（值类型）。</typeparam>
-        /// <param name="eventData">事件数据实例。</param>
-        /// <returns>表示异步操作的任务。</returns>
-        public async FTask PublishAsync<TEventData>(TEventData eventData) where TEventData : struct
-        {
-            if (!_asyncEvents.TryGetValue(typeof(TEventData), out var list))
-            {
-                return;
-            }
-
-            using var tasks = ListPool<FTask>.Create();
-
-            foreach (var @event in list)
-            {
-                tasks.Add(@event.InvokeAsync(eventData));
-            }
-
-            await FTask.WaitAll(tasks);
-        }
-
-        /// <summary>
-        /// 异步发布一个继承自 Entity 的事件数据。
-        /// </summary>
-        /// <typeparam name="TEventData">事件数据类型（继承自 Entity）。</typeparam>
-        /// <param name="eventData">事件数据实例。</param>
-        /// <param name="isDisposed">是否释放事件数据。</param>
-        /// <returns>表示异步操作的任务。</returns>
-        public async FTask PublishAsync<TEventData>(TEventData eventData, bool isDisposed = true) where TEventData : Entity
-        {
-            if (!_asyncEvents.TryGetValue(eventData.GetType(), out var list))
-            {
-                return;
-            }
-
-            using var tasks = ListPool<FTask>.Create();
-
-            foreach (var @event in list)
-            {
-                tasks.Add(@event.InvokeAsync(eventData));
-            }
-
-            await FTask.WaitAll(tasks);
 
             if (isDisposed)
             {
@@ -238,15 +163,64 @@ namespace Fantasy.Event
             }
         }
         
-        #endregion
-
-        public override void Dispose()
+        /// <summary>
+        /// 发布异步事件（struct类型）
+        /// </summary>
+        /// <typeparam name="TEventData">事件数据类型（值类型）</typeparam>
+        /// <param name="eventData">事件数据</param>
+        public async FTask PublishAsync<TEventData>(TEventData eventData) where TEventData : struct
         {
-            _events.Clear();
-            _asyncEvents.Clear();
-            _assemblyEvents.Clear();
-            _assemblyAsyncEvents.Clear();
-            base.Dispose();
+            if (!_asyncEvents.TryGetValue(typeof(TEventData).TypeHandle, out var list))
+            {
+                return;
+            }
+
+            using var tasks = ListPool<FTask>.Create();
+
+            foreach (var @event in list)
+            {
+                tasks.Add(((IAsyncEvent<TEventData>)@event).InvokeAsync(eventData));
+            }
+
+            await FTask.WaitAll(tasks);
         }
+
+        /// <summary>
+        /// 发布异步事件（Entity类型）
+        /// </summary>
+        /// <typeparam name="TEventData">事件数据类型（Entity类型）</typeparam>
+        /// <param name="eventData">事件数据</param>
+        /// <param name="isDisposed">事件处理完成后是否自动销毁Entity</param>
+        public async FTask PublishAsync<TEventData>(TEventData eventData, bool isDisposed = true) where TEventData : Entity
+        {
+            if (!_asyncEvents.TryGetValue(typeof(TEventData).TypeHandle, out var list))
+            {
+                return;
+            }
+
+            using var tasks = ListPool<FTask>.Create();
+
+            foreach (var @event in list)
+            {
+                try
+                {
+                    tasks.Add(((IAsyncEvent<TEventData>)@event).InvokeAsync(eventData));
+                }
+                catch (Exception e)
+                {
+                    Log.Error(e);
+                }
+            }
+
+            await FTask.WaitAll(tasks);
+
+            if (isDisposed)
+            {
+                eventData.Dispose();
+            }
+        }
+
+        #endregion
     }
 }
+

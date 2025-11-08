@@ -40,7 +40,7 @@ namespace Fantasy.Platform.Net
 		/// 初始化SceneConfig
 		/// </summary>
 		/// <param name="sceneConfigJson"></param>
-		public static void Initialize(string sceneConfigJson)
+		public static void InitializeFromJson(string sceneConfigJson)
 		{
 			try
 			{
@@ -209,7 +209,7 @@ namespace Fantasy.Platform.Net
 		/// </summary>
 	    public void Initialize()
 	    {
-		    RouteId =  IdFactoryHelper.RuntimeId(0, Id, (byte)WorldConfigId, 0);
+		    RouteId = IdFactoryHelper.RuntimeId(false, 0, Id, (byte)WorldConfigId, 0);
 	    }
     }
 }
