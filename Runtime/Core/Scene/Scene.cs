@@ -53,7 +53,6 @@ namespace Fantasy
     /// 表示一个场景实体，用于创建与管理特定的游戏场景信息。
     /// </summary>
     [SuppressMessage("Compiler", "CS8618:Non-nullable field must contain a non-null value when exiting constructor. Consider adding the \'required\' modifier or declaring as nullable.")]
-    [SuppressMessage("Compiler", "CS8618:Non-nullable field must contain a non-null value when exiting constructor. Consider adding the \'required\' modifier or declaring as nullable.")]
     public partial class Scene : Entity
     {
         #region Members
@@ -345,18 +344,25 @@ namespace Fantasy
         public static async FTask<Scene> Create(string sceneRuntimeMode = SceneRuntimeMode.MainThread)
         {
             var world = ++_unityWorldId;
-
-            if (world > byte.MaxValue - 1)
-            {
-                throw new Exception($"World ID ({world}) exceeds the maximum allowed value of 255.");
-            }
-
-            var sceneId = (uint)(++_unitySceneId + world * 1000);
+            var sceneId = ++_unitySceneId;
             
-            if (sceneId > 255255)
+            if (sceneId > 65535)
             {
-                throw new Exception($"Scene ID ({sceneId}) exceeds the maximum allowed value of 255255.");
+                throw new Exception($"Scene ID ({sceneId}) exceeds the maximum allowed value of 65535.");
             }
+            
+            //
+            // if (world > byte.MaxValue - 1)
+            // {
+            //     throw new Exception($"World ID ({world}) exceeds the maximum allowed value of 255.");
+            // }
+
+            // var sceneId = (uint)(++_unitySceneId + world * 1000);
+            //
+            // if (sceneId > 255255)
+            // {
+            //     throw new Exception($"Scene ID ({sceneId}) exceeds the maximum allowed value of 255255.");
+            // }
 
             var scene = new Scene();
             scene.Scene = scene;
