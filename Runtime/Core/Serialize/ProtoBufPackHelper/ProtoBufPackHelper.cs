@@ -39,7 +39,21 @@ namespace Fantasy.Serialize
             RuntimeTypeModel.Default.AutoAddMissingTypes = true; // 自动添加缺失的类型
             RuntimeTypeModel.Default.AllowParseableTypes = true; // 允许可解析类型
             RuntimeTypeModel.Default.AutoAddMissingTypes = true; // 自动添加缺失的类型
-            RuntimeTypeModel.Default.AutoCompile = true; // 自动编译模型以提升性能
+#if UNITY_EDITOR || !ENABLE_IL2CPP
+            // 仅在支持动态代码生成的环境下启用自动编译
+            // Native AOT 和 IL2CPP 不支持 DynamicMethod，必须禁用 AutoCompile
+            if (RuntimeFeature.IsDynamicCodeSupported)
+            {
+                RuntimeTypeModel.Default.AutoCompile = true; // 自动编译模型以提升性能
+            }
+            else
+            {
+                RuntimeTypeModel.Default.AutoCompile = false; // AOT 环境禁用动态编译
+            }
+#else
+            RuntimeTypeModel.Default.AutoCompile = false; // IL2CPP 环境禁用动态编译
+#endif
+
             RuntimeTypeModel.Default.UseImplicitZeroDefaults = true; // 使用隐式零默认值
             RuntimeTypeModel.Default.InferTagFromNameDefault = true; // 从名称推断标签
 
@@ -57,16 +71,16 @@ namespace Fantasy.Serialize
             var protoBufTypes = assemblyManifest.NetworkProtocolRegistrar.GetNetworkProtocolTypes();
             if (protoBufTypes.Any())
             {
-                // 将所有网络协议类型注册到 ProtoBuf 模型
-                foreach (var protoBufType in protoBufTypes)
-                {
-                    RuntimeTypeModel.Default.Add(protoBufType, true);
-                }
 #if UNITY_EDITOR || !ENABLE_IL2CPP
-                // 编译模型以提高序列化/反序列化性能
-                // 在 AOT 环境下跳过编译，因为动态代码生成不被支持
+                // 在支持反射的环境下，将所有网络协议类型注册到 ProtoBuf 模型
+                // AOT 环境下跳过类型注册，依赖 AutoAddMissingTypes 和协议类上的 ProtoContract 特性
                 if (RuntimeFeature.IsDynamicCodeSupported)
                 {
+                    foreach (var protoBufType in protoBufTypes)
+                    {
+                        RuntimeTypeModel.Default.Add(protoBufType, true);
+                    }
+                    // 编译模型以提高序列化/反序列化性能
                     RuntimeTypeModel.Default.CompileInPlace();
                 }
 #endif
