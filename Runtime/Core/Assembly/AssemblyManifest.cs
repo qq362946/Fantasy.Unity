@@ -37,9 +37,14 @@ namespace Fantasy.Assembly
         public System.Reflection.Assembly Assembly { get; private set; }
 
         /// <summary>
-        /// ProtoBuf 序列化类型注册器
+        /// 网络协议 序列化类型注册器
         /// </summary>
         internal INetworkProtocolRegistrar NetworkProtocolRegistrar { get; private set; }
+        
+        /// <summary>
+        /// ProtoBuf 分发器注册器接口用于解决 Native AOT 和 IL2CPP 下 ProtoBuf 反射问题
+        /// </summary>
+        internal IProtoBufDispatcherRegistrar ProtoBufDispatcherRegistrar { get; private set; }
 
         /// <summary>
         /// 事件系统注册器
@@ -75,10 +80,16 @@ namespace Fantasy.Assembly
         /// 自定义接口
         /// </summary>
         internal ICustomInterfaceRegistrar CustomInterfaceRegistrar { get; private set; }
+
         /// <summary>
         /// 池生成器注册器
         /// </summary>
-        internal IPoolCreatorGenerator PoolCreatorGenerator{ get; set; }
+        internal IPoolCreatorGenerator PoolCreatorGenerator { get; set; }
+
+        /// <summary>
+        /// MemoryPack注册器
+        /// </summary>
+        internal IMemoryPackEntityGenerator MemoryPackEntityGenerator { get; set; }
 #if FANTASY_NET
         /// <summary>
         /// 分表注册器
@@ -141,6 +152,8 @@ namespace Fantasy.Assembly
         /// <param name="customInterfaceRegistrar">自定接口注册器</param>
         /// <param name="fantasyConfigRegistrar">Fantasy配置注册器</param>
         /// <param name="poolCreatorGenerator">池生成器注册器</param>
+        /// <param name="protoBufDispatcherRegistrar">Protobuf消息分发器</param>
+        /// <param name="memoryPackEntityGenerator">memoryPack生成器</param>
         public static void Register(
             long assemblyManifestId,
             System.Reflection.Assembly assembly,
@@ -155,7 +168,9 @@ namespace Fantasy.Assembly
             ISphereEventRegistrar sphereEventRegistrar,
             ICustomInterfaceRegistrar customInterfaceRegistrar,
             IFantasyConfigRegistrar fantasyConfigRegistrar,
-            IPoolCreatorGenerator poolCreatorGenerator)
+            IPoolCreatorGenerator poolCreatorGenerator,
+            IProtoBufDispatcherRegistrar protoBufDispatcherRegistrar,
+            IMemoryPackEntityGenerator memoryPackEntityGenerator)
         {
             var manifest = new AssemblyManifest
             {
@@ -171,7 +186,9 @@ namespace Fantasy.Assembly
                 ResponseTypeRegistrar = responseTypeRegistrar,
                 SphereEventRegistrar = sphereEventRegistrar,
                 CustomInterfaceRegistrar = customInterfaceRegistrar,
-                PoolCreatorGenerator = poolCreatorGenerator
+                PoolCreatorGenerator = poolCreatorGenerator,
+                ProtoBufDispatcherRegistrar = protoBufDispatcherRegistrar,
+                MemoryPackEntityGenerator = memoryPackEntityGenerator
             };
 
             // 设置数据库名字字典
@@ -208,6 +225,8 @@ namespace Fantasy.Assembly
         /// <param name="responseTypeRegistrar">网络协议 Response 注册器</param>
         /// <param name="customInterfaceRegistrar">自定接口注册器</param>
         /// <param name="poolCreatorGenerator">池生成器注册器</param>
+        /// <param name="protoBufDispatcherRegistrar">Protobuf消息分发器</param>
+        /// <param name="memoryPackEntityGenerator">memoryPack生成器</param>
         public static void Register(
             long assemblyManifestId,
             System.Reflection.Assembly assembly,
@@ -219,7 +238,9 @@ namespace Fantasy.Assembly
             IOpCodeRegistrar opCodeRegistrar,
             IResponseTypeRegistrar responseTypeRegistrar,
             ICustomInterfaceRegistrar customInterfaceRegistrar,
-            IPoolCreatorGenerator poolCreatorGenerator)
+            IPoolCreatorGenerator poolCreatorGenerator,
+            IProtoBufDispatcherRegistrar protoBufDispatcherRegistrar,
+            IMemoryPackEntityGenerator memoryPackEntityGenerator)
         {
             var manifest = new AssemblyManifest
             {
@@ -233,7 +254,9 @@ namespace Fantasy.Assembly
                 OpCodeRegistrar = opCodeRegistrar,
                 ResponseTypeRegistrar = responseTypeRegistrar,
                 CustomInterfaceRegistrar = customInterfaceRegistrar,
-                PoolCreatorGenerator = poolCreatorGenerator
+                PoolCreatorGenerator = poolCreatorGenerator,
+                ProtoBufDispatcherRegistrar = protoBufDispatcherRegistrar,
+                MemoryPackEntityGenerator = memoryPackEntityGenerator
             };
 #if FANTASY_WEBGL
             Manifests[assemblyManifestId] = manifest;

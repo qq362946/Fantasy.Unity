@@ -28,8 +28,6 @@ namespace Fantasy
         internal void Initialize(Scene rootScene)
         {
             EntityPool = rootScene.EntityPool;
-            EntityListPool = rootScene.EntityListPool;
-            EntitySortedDictionaryPool = rootScene.EntitySortedDictionaryPool;
             EventAwaiterPool = rootScene.EventAwaiterPool;
             SceneUpdate = rootScene.SceneUpdate;
 #if FANTASY_UNITY
@@ -38,7 +36,6 @@ namespace Fantasy
             TimerComponent = rootScene.TimerComponent;
             EventComponent = rootScene.EventComponent;
             EntityComponent = rootScene.EntityComponent;
-            MessagePoolComponent = rootScene.MessagePoolComponent;
             CoroutineLockComponent = rootScene.CoroutineLockComponent;
             MessageDispatcherComponent = rootScene.MessageDispatcherComponent;
             PoolGeneratorComponent = rootScene.PoolGeneratorComponent;

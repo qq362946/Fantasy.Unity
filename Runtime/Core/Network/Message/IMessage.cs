@@ -3,39 +3,22 @@ using System.Runtime.Serialization;
 using Fantasy.Async;
 using Fantasy.Pool;
 using Fantasy.Serialize;
+using LightProto;
+using MemoryPack;
 using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
-using ProtoBuf;
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 
 namespace Fantasy.Network.Interface
 {
-    public abstract class AMessage : IDisposable, IPool
+    public abstract class AMessage : IPool
     {
-#if FANTASY_NET || FANTASY_UNITY || FANTASY_CONSOLE
-        [BsonIgnore] 
         [JsonIgnore] 
         [IgnoreDataMember] 
         [ProtoIgnore]
-        private Scene _scene;
-        protected Scene GetScene()
-        {
-            return _scene;
-        }
-
-        public void SetScene(Scene scene)
-        {
-            _scene = scene;
-        }
-#endif
-#if FANTASY_NET
-        [BsonIgnore] 
-#endif
-        [JsonIgnore] 
-        [IgnoreDataMember] 
-        [ProtoIgnore]
+        [MemoryPackIgnore]
         private bool _isPool;
 
         public bool IsPool()
@@ -47,17 +30,12 @@ namespace Fantasy.Network.Interface
         {
             _isPool = isPool;
         }
-
-        public virtual void Dispose()
-        {
-            
-        }
     }
     
     /// <summary>
     /// 表示通用消息接口。
     /// </summary>
-    public interface IMessage
+    public interface IMessage : IDisposable
     {
         /// <summary>
         /// 获取消息的操作代码。

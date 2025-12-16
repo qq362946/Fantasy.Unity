@@ -2,11 +2,9 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using Fantasy.Helper;
-#if !FANTASY_EXPORTER
 using Fantasy.Async;
-using Fantasy.Network;
-#endif
+using LightProto;
+
 #pragma warning disable CS8604 // Possible null reference argument.
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
@@ -42,7 +40,7 @@ namespace Fantasy.Serialize
         /// <summary>
         /// ProtoBuf 序列化
         /// </summary>
-        public static ProtoBufPackHelper ProtoBufPack { get; private set; }
+        public static ProtoBufHelper ProtoBufHelper { get; private set; }
 #if FANTASY_NET
         /// <summary>
         /// BSON 序列化
@@ -52,7 +50,7 @@ namespace Fantasy.Serialize
         /// <summary>
         /// MemoryPack 序列化
         /// </summary>
-        public static MemoryPackHelper MemoryPack { get; private set; }
+        public static MemoryPackHelper MemoryPackHelper { get; private set; }
         
         private static volatile bool _isInitialized = false;
         
@@ -65,12 +63,12 @@ namespace Fantasy.Serialize
             {
                 return;
             }
-
-            ProtoBufPack = await new ProtoBufPackHelper().Initialize();
+            
+            ProtoBufHelper = await new ProtoBufHelper().Initialize();
 #if FANTASY_NET
             BsonPack = await new BsonPackHelper().Initialize();
 #endif
-            MemoryPack = await new MemoryPackHelper().Initialize();
+            MemoryPackHelper = await new MemoryPackHelper().Initialize();
             _isInitialized = true;
         }
 
@@ -80,14 +78,14 @@ namespace Fantasy.Serialize
         /// 尝试反序列化 - 从字节数组反序列化
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryDeserialize<T>(uint opCodeProtocolType, byte[] bytes, out T result, out string error)
+        public static bool TryDeserialize<T>(uint opCodeProtocolType, byte[] bytes, out T result, out string error) where T : IProtoParser<T>
         {
             error = null;
             switch (opCodeProtocolType)
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    result = ProtoBufPack.Deserialize<T>(bytes);
+                    result = ProtoBufHelper.Deserialize<T>(bytes);
                     return true;
                 }
                 case FantasySerializerType.Bson:
@@ -104,7 +102,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    result = MemoryPack.Deserialize<T>(bytes);
+                    result = MemoryPackHelper.Deserialize<T>(bytes);
                     return true;
                 }
                 default:
@@ -120,7 +118,7 @@ namespace Fantasy.Serialize
         /// 尝试反序列化 - 从 MemoryStreamBuffer 反序列化
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryDeserialize<T>(uint opCodeProtocolType, MemoryStreamBuffer buffer, out T result, out string error)
+        public static bool TryDeserialize<T>(uint opCodeProtocolType, MemoryStreamBuffer buffer, out T result, out string error) where T : IProtoParser<T>
         {
             error = null;
             
@@ -128,7 +126,7 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    result = ProtoBufPack.Deserialize<T>(buffer);
+                    result = ProtoBufHelper.Deserialize<T>(buffer);
                     return true;
                 }
                 case FantasySerializerType.Bson:
@@ -145,7 +143,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    result = MemoryPack.Deserialize<T>(buffer);
+                    result = MemoryPackHelper.Deserialize<T>(buffer);
                     return true;
                 }
                 default:
@@ -169,7 +167,7 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    result = ProtoBufPack.Deserialize(type, bytes);
+                    result = ProtoBufHelper.Deserialize(type, bytes);
                     return true;
                 }
                 case FantasySerializerType.Bson:
@@ -186,7 +184,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    result = MemoryPack.Deserialize(type, bytes);
+                    result = MemoryPackHelper.Deserialize(type, bytes);
                     return true;
                 }
                 default:
@@ -210,7 +208,7 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    result = ProtoBufPack.Deserialize(type, buffer);
+                    result = ProtoBufHelper.Deserialize(type, buffer);
                     return true;
                 }
                 case FantasySerializerType.Bson:
@@ -227,7 +225,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    result = MemoryPack.Deserialize(type, buffer);
+                    result = MemoryPackHelper.Deserialize(type, buffer);
                     return true;
                 }
                 default:
@@ -243,7 +241,7 @@ namespace Fantasy.Serialize
         /// 尝试反序列化 - 从字节数组的指定范围反序列化
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryDeserialize<T>(uint opCodeProtocolType, byte[] bytes, int index, int count, out T result, out string error)
+        public static bool TryDeserialize<T>(uint opCodeProtocolType, byte[] bytes, int index, int count, out T result, out string error) where T : IProtoParser<T>
         {
             error = null;
 
@@ -251,7 +249,7 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    result = ProtoBufPack.Deserialize<T>(bytes, index, count);
+                    result = ProtoBufHelper.Deserialize<T>(bytes, index, count);
                     return true;
                 }
                 case FantasySerializerType.Bson:
@@ -268,7 +266,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    result = MemoryPack.Deserialize<T>(bytes, index, count);
+                    result = MemoryPackHelper.Deserialize<T>(bytes, index, count);
                     return true;
                 }
                 default:
@@ -292,7 +290,7 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    result = ProtoBufPack.Deserialize(type, bytes, index, count);
+                    result = ProtoBufHelper.Deserialize(type, bytes, index, count);
                     return true;
                 }
                 case FantasySerializerType.Bson:
@@ -309,48 +307,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    result = MemoryPack.Deserialize(type, bytes, index, count);
-                    return true;
-                }
-                default:
-                {
-                    result = null!;
-                    error = $"Unknown protocol type: {opCodeProtocolType}";
-                    return false;
-                }
-            }
-        }
-
-        /// <summary>
-        /// 尝试序列化 - 序列化对象到字节数组
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TrySerialize(uint opCodeProtocolType, object obj, out byte[] result, out string error)
-        {
-            error = null;
-
-            switch (opCodeProtocolType)
-            {
-                case FantasySerializerType.ProtoBuf:
-                {
-                    result = ProtoBufPack.Serialize(obj);
-                    return true;
-                }
-                case FantasySerializerType.Bson:
-                {
-#if FANTASY_NET
-                    result = BsonPack.Serialize(obj);
-                    return true;   
-#endif
-#if FANTASY_UNITY
-                    result = null!;
-                    error =  $"Unknown protocol type: {opCodeProtocolType}";
-                    return false;
-#endif
-                }
-                case FantasySerializerType.MemoryPack:
-                {
-                    result = MemoryPack.Serialize(obj);
+                    result = MemoryPackHelper.Deserialize(type, bytes, index, count);
                     return true;
                 }
                 default:
@@ -366,7 +323,7 @@ namespace Fantasy.Serialize
         /// 尝试序列化 - 序列化泛型对象到字节数组
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TrySerialize<T>(uint opCodeProtocolType, T obj, out byte[] result, out string error)
+        public static bool TrySerialize<T>(uint opCodeProtocolType, T obj, out byte[] result, out string error) where T : IProtoParser<T>
         {
             error = null;
 
@@ -374,13 +331,13 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    result = ProtoBufPack.Serialize(obj);
+                    result = ProtoBufHelper.Serialize<T>(obj);
                     return true;
                 }
                 case FantasySerializerType.Bson:
                 {
 #if FANTASY_NET
-                    result = BsonPack.Serialize(obj);
+                    result = BsonPack.Serialize<T>(obj);
                     return true;   
 #endif
 #if FANTASY_UNITY
@@ -391,7 +348,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    result = MemoryPack.Serialize(obj);
+                    result = MemoryPackHelper.Serialize<T>(obj);
                     return true;
                 }
                 default:
@@ -407,7 +364,7 @@ namespace Fantasy.Serialize
         /// 尝试序列化 - 序列化泛型对象到 IBufferWriter
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TrySerialize<T>(uint opCodeProtocolType, T obj, IBufferWriter<byte> buffer, out string error)
+        public static bool TrySerialize<T>(uint opCodeProtocolType, T obj, IBufferWriter<byte> buffer, out string error) where T : IProtoParser<T>
         {
             error = null;
 
@@ -415,13 +372,13 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    ProtoBufPack!.Serialize(obj, buffer);
+                    ProtoBufHelper!.Serialize<T>(obj, buffer);
                     return true;
                 }
                 case FantasySerializerType.Bson:
                 {
 #if FANTASY_NET
-                    BsonPack.Serialize(obj, buffer);
+                    BsonPack.Serialize<T>(obj, buffer);
                     return true;   
 #endif
 #if FANTASY_UNITY
@@ -431,46 +388,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    MemoryPack.Serialize(obj, buffer);
-                    return true;
-                }
-                default:
-                {
-                    error = $"Unknown protocol type: {opCodeProtocolType}";
-                    return false;
-                }
-            }
-        }
-
-        /// <summary>
-        /// 尝试序列化 - 序列化对象到 IBufferWriter
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TrySerialize(uint opCodeProtocolType, object obj, IBufferWriter<byte> buffer, out string error)
-        {
-            error = null;
-
-            switch (opCodeProtocolType)
-            {
-                case FantasySerializerType.ProtoBuf:
-                {
-                    ProtoBufPack.Serialize(obj, buffer);
-                    return true;
-                }
-                case FantasySerializerType.Bson:
-                {
-#if FANTASY_NET
-                    BsonPack.Serialize(obj, buffer);
-                    return true;   
-#endif
-#if FANTASY_UNITY
-                    error =  $"Unknown protocol type: {opCodeProtocolType}";
-                    return false;
-#endif
-                }
-                case FantasySerializerType.MemoryPack:
-                {
-                    MemoryPack.Serialize(obj, buffer);
+                    MemoryPackHelper.Serialize<T>(obj, buffer);
                     return true;
                 }
                 default:
@@ -493,7 +411,7 @@ namespace Fantasy.Serialize
             {
                 case FantasySerializerType.ProtoBuf:
                 {
-                    ProtoBufPack!.Serialize(type, obj, buffer);
+                    ProtoBufHelper!.Serialize(type, obj, buffer);
                     return true;
                 }
                 case FantasySerializerType.Bson:
@@ -509,7 +427,7 @@ namespace Fantasy.Serialize
                 }
                 case FantasySerializerType.MemoryPack:
                 {
-                    MemoryPack.Serialize(type, obj, buffer);
+                    MemoryPackHelper.Serialize(type, obj, buffer);
                     return true;
                 }
                 default:
@@ -524,7 +442,7 @@ namespace Fantasy.Serialize
         /// 尝试克隆 - 通过序列化和反序列化创建对象深拷贝
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool TryClone<T>(uint opCodeProtocolType, T obj, out T result, out string error)
+        public static bool TryClone<T>(uint opCodeProtocolType, T obj, out T result, out string error) where T : IProtoParser<T>
         {
             error = null;
 
@@ -533,14 +451,14 @@ namespace Fantasy.Serialize
                 case FantasySerializerType.ProtoBuf:
                 {
                     error = null;
-                    result = ProtoBufPack.Clone(obj);
+                    result = ProtoBufHelper.Clone<T>(obj);
                     return true;
                 }
                 case FantasySerializerType.Bson:
                 {
 #if FANTASY_NET
                     error = null;
-                    result = BsonPack.Clone(obj);
+                    result = BsonPack.Clone<T>(obj);
                     return true;   
 #endif
 #if FANTASY_UNITY
@@ -552,7 +470,7 @@ namespace Fantasy.Serialize
                 case FantasySerializerType.MemoryPack:
                 {
                     error = null;
-                    result = MemoryPack.Clone(obj);
+                    result = MemoryPackHelper.Clone<T>(obj);
                     return true;
                 }
                 default:
@@ -572,11 +490,11 @@ namespace Fantasy.Serialize
         public static void Dispose()
         {
             _isInitialized = false;
-            ProtoBufPack = null;
+            ProtoBufHelper = null;
 #if FANTASY_NET
             BsonPack = null;
 #endif
-            MemoryPack = null;
+            MemoryPackHelper = null;
         }
     }
 }

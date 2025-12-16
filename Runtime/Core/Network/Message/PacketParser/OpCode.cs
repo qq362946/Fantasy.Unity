@@ -57,9 +57,9 @@ namespace Fantasy.Network
         public const uint InnerRequest  = 5;
         public const uint InnerResponse = 6;
         
-        public const uint InnerRouteMessage = 7;
-        public const uint InnerRouteRequest = 8;
-        public const uint InnerRouteResponse = 9;
+        public const uint InnerAddressMessage = 7;
+        public const uint InnerAddressRequest = 8;
+        public const uint InnerAddressResponse = 9;
         
         public const uint OuterAddressableMessage = 10;
         public const uint OuterAddressableRequest = 11;
@@ -107,8 +107,7 @@ namespace Fantasy.Network
         public const uint AddressableLockResponse = 1207959556;                     // Create(ProtoBuf=0, InnerAddressResponse=9, 4)
         public const uint AddressableUnLockRequest = 1073741829;                    // Create(ProtoBuf=0, InnerAddressRequest=8, 5)
         public const uint AddressableUnLockResponse = 1207959557;                   // Create(ProtoBuf=0, InnerAddressResponse=9, 5)
-        public const uint LinkRoamingRequest = 1073741830;                          // Create(ProtoBuf=0, InnerAddressRequest=8, 6)
-        public const uint LinkRoamingResponse = 1207959558;                         // Create(ProtoBuf=0, InnerAddressResponse=9, 6)
+        
         public const uint UnLinkRoamingRequest = 1073741832;                        // Create(ProtoBuf=0, InnerAddressRequest=8, 8)
         public const uint UnLinkRoamingResponse = 1207959560;                       // Create(ProtoBuf=0, InnerAddressResponse=9, 8)
         public const uint LockTerminusIdRequest = 1073741833;                       // Create(ProtoBuf=0, InnerAddressRequest=8, 9)
@@ -122,18 +121,21 @@ namespace Fantasy.Network
         public const uint StopForwardingRequest = 1073741837;                       // Create(ProtoBuf=0, InnerAddressRequest=8, 13)
         public const uint StopForwardingResponse = 1207959565;                      // Create(ProtoBuf=0, InnerAddressResponse=9, 13)
         
-        public const uint TransferTerminusRequest = 1082130433;                     // Create(Bson=1, InnerAddressRequest=8, 1)
-        public const uint TransferTerminusResponse = 1216348161;                    // Create(Bson=1, InnerAddressResponse=9, 1)
+        public const uint TransferTerminusRequest = 1090519041;                     // Create(MemoryPack=2, InnerAddressRequest=8, 1)
+        public const uint TransferTerminusResponse = 1224736769;                    // Create(MemoryPack=2, InnerAddressResponse=9, 1)
         
-        public const uint SubscribeSphereEventRequest = 1082130434;                 // Create(Bson=1, InnerAddressRequest=8, 2)
-        public const uint SubscribeSphereEventResponse = 1216348162;                // Create(Bson=1, InnerAddressResponse=9, 2)
-        public const uint UnsubscribeSphereEventRequest = 1082130435;               // Create(Bson=1, InnerAddressRequest=8, 3)
-        public const uint UnsubscribeSphereEventResponse = 1216348163;              // Create(Bson=1, InnerAddressResponse=9, 3)
-        public const uint RevokeRemoteSubscriberRequest = 1082130436;               // Create(Bson=1, InnerAddressRequest=8, 4)
-        public const uint RevokeRemoteSubscriberResponse = 1216348164;              // Create(Bson=1, InnerAddressResponse=9, 4)
-        public const uint PublishSphereEventRequest = 1082130437;                   // Create(Bson=1, InnerAddressRequest=8, 5)
-        public const uint PublishSphereEventResponse = 1216348165;                  // Create(Bson=1, InnerAddressResponse=9, 5)
+        public const uint SubscribeSphereEventRequest = 1090519042;                 // Create(MemoryPack=2, InnerAddressRequest=8, 2)
+        public const uint SubscribeSphereEventResponse = 1224736770;                // Create(MemoryPack=2, InnerAddressResponse=9, 2)
+        public const uint UnsubscribeSphereEventRequest = 1090519043;               // Create(MemoryPack=2, InnerAddressRequest=8, 3)
+        public const uint UnsubscribeSphereEventResponse = 1224736771;              // Create(MemoryPack=2, InnerAddressResponse=9, 3)
+        public const uint RevokeRemoteSubscriberRequest = 1090519044;               // Create(MemoryPack=2, InnerAddressRequest=8, 4)
+        public const uint RevokeRemoteSubscriberResponse = 1224736772;              // Create(MemoryPack=2, InnerAddressResponse=9, 4)
+        public const uint PublishSphereEventRequest = 1090519045;                   // Create(MemoryPack=2, InnerAddressRequest=8, 5)
+        public const uint PublishSphereEventResponse = 1224736773;                  // Create(MemoryPack=2, InnerAddressResponse=9, 5)
 
+        public const uint LinkRoamingRequest = 1090519046;                          // Create(MemoryPack=2, InnerAddressRequest=8, 6)
+        public const uint LinkRoamingResponse = 1224736774;                         // Create(MemoryPack=2, InnerAddressResponse=9, 6)
+        
         /// <summary>
         /// 创建 OpCode（运行时使用）
         /// </summary>
