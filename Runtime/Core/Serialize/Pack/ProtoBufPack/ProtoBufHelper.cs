@@ -248,11 +248,32 @@ namespace Fantasy.Serialize
         }
 
         #endregion
-        
+
+        #region Clone
+
         /// <inheritdoc/>
         public T Clone<T>(T t) where T : IProtoParser<T>
         {
             return Deserialize<T>(Serialize(t));
         }
+        
+        /// <inheritdoc/>
+        public object Clone(Type type, object @object)
+        {
+            if (_cachedStream == null)
+            {
+                _cachedStream = new MemoryStreamBuffer();
+            }
+            else
+            {
+                _cachedStream.SetLength(0);
+                _cachedStream.Position = 0;
+            }
+
+            _serializes[type.TypeHandle](_cachedStream, @object);
+            return _deserializes[type.TypeHandle](_cachedStream);
+        }
+
+        #endregion
     }
 }
