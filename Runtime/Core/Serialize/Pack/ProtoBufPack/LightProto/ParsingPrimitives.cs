@@ -463,7 +463,7 @@ namespace LightProto
         public static byte[] ReadRawBytes(
             ref ReadOnlySpan<byte> buffer,
             ref ParserInternalState state,
-            int size
+            long size
         )
         {
             if (size < 0)
@@ -475,8 +475,8 @@ namespace LightProto
             {
                 // We have all the bytes we need already.
                 byte[] bytes = new byte[size];
-                buffer.Slice(state.bufferPos, size).CopyTo(bytes);
-                state.bufferPos += size;
+                buffer.Slice(state.bufferPos, (int)size).CopyTo(bytes);
+                state.bufferPos += (int)size;
                 return bytes;
             }
 
@@ -486,7 +486,7 @@ namespace LightProto
         private static byte[] ReadRawBytesSlow(
             ref ReadOnlySpan<byte> buffer,
             ref ParserInternalState state,
-            int size
+            long size
         )
         {
             ValidateCurrentLimit(ref buffer, ref state, size);
@@ -500,7 +500,7 @@ namespace LightProto
                 // of bytes.  We can safely allocate the resulting array ahead of time.
 
                 byte[] bytes = new byte[size];
-                ReadRawBytesIntoSpan(ref buffer, ref state, size, bytes);
+                ReadRawBytesIntoSpan(ref buffer, ref state, (int)size, bytes);
                 return bytes;
             }
             else
@@ -522,7 +522,7 @@ namespace LightProto
                 state.bufferPos = state.bufferSize;
 
                 // Read all the rest of the bytes we need.
-                int sizeLeft = size - pos;
+                var sizeLeft = size - pos;
                 while (sizeLeft > 0)
                 {
                     state.segmentedBufferHelper.RefillBuffer(ref buffer, ref state, true);
@@ -556,7 +556,7 @@ namespace LightProto
         public static void SkipRawBytes(
             ref ReadOnlySpan<byte> buffer,
             ref ParserInternalState state,
-            int size
+            long size
         )
         {
             if (size < 0)
@@ -569,12 +569,12 @@ namespace LightProto
             if (size <= state.bufferSize - state.bufferPos)
             {
                 // We have all the bytes we need already.
-                state.bufferPos += size;
+                state.bufferPos += (int)size;
             }
             else
             {
                 // Skipping more bytes than are in the buffer.  First skip what we have.
-                int pos = state.bufferSize - state.bufferPos;
+                long pos = state.bufferSize - state.bufferPos;
                 state.bufferPos = state.bufferSize;
 
                 // TODO: If our segmented buffer is backed by a Stream that is seekable, we could skip the bytes more efficiently
@@ -589,7 +589,7 @@ namespace LightProto
                     state.segmentedBufferHelper.RefillBuffer(ref buffer, ref state, true);
                 }
 
-                state.bufferPos = size - pos;
+                state.bufferPos = (int)(size - pos);
             }
         }
 
@@ -734,7 +734,7 @@ namespace LightProto
         private static void ValidateCurrentLimit(
             ref ReadOnlySpan<byte> buffer,
             ref ParserInternalState state,
-            int size
+            long size
         )
         {
             if (state.totalBytesRetired + state.bufferPos + size > state.currentLimit)
@@ -796,7 +796,7 @@ namespace LightProto
         /// When parsing from a Stream this can return false because we have no knowledge of the amount
         /// of data remaining in the stream until it is read.
         /// </summary>
-        public static bool IsDataAvailable(ref ParserInternalState state, int size)
+        public static bool IsDataAvailable(ref ParserInternalState state, long size)
         {
             // Data fits in remaining buffer
             if (size <= state.bufferSize - state.bufferPos)
@@ -813,7 +813,7 @@ namespace LightProto
         /// When parsing from a Stream this will return false because we have no knowledge of the amount
         /// of data remaining in the stream until it is read.
         /// </summary>
-        private static bool IsDataAvailableInSource(ref ParserInternalState state, int size)
+        private static bool IsDataAvailableInSource(ref ParserInternalState state, long size)
         {
             // Data fits in remaining source data.
             // Note that this will never be true when reading from a stream as the total length is unknown.

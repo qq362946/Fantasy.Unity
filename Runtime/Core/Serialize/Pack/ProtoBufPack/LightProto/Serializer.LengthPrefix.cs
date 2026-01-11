@@ -436,4 +436,5 @@ namespace LightProto
         /// </summary>
         Fixed32BigEndian = 3,
     }
+
 }
