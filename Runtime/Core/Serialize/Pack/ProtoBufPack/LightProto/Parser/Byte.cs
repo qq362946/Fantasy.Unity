@@ -1,11 +1,11 @@
-﻿namespace LightProto.Parser
+namespace LightProto.Parser
 {
-    public sealed class Int32ProtoParser : IProtoParser<int>
+    public sealed class ByteProtoParser : IProtoParser<byte>
     {
-        public static IProtoReader<int> ProtoReader { get; } = new Int32ProtoReader();
-        public static IProtoWriter<int> ProtoWriter { get; } = new Int32ProtoWriter();
+        public static IProtoReader<byte> ProtoReader { get; } = new ByteProtoReader();
+        public static IProtoWriter<byte> ProtoWriter { get; } = new ByteProtoWriter();
 
-        sealed class Int32ProtoReader : IProtoReader<int>
+        sealed class ByteProtoReader : IProtoReader<byte>
         {
             public WireFormat.WireType WireType => WireFormat.WireType.Varint;
             public bool IsMessage => false;
@@ -13,13 +13,13 @@
             [System.Runtime.CompilerServices.MethodImpl(
                 System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining
             )]
-            public int ParseFrom(ref ReaderContext input)
+            public byte ParseFrom(ref ReaderContext input)
             {
-                return input.ReadInt32();
+                return (byte)input.ReadUInt32();
             }
         }
 
-        sealed class Int32ProtoWriter : IProtoWriter<int>
+        sealed class ByteProtoWriter : IProtoWriter<byte>
         {
             public WireFormat.WireType WireType => WireFormat.WireType.Varint;
             public bool IsMessage => false;
@@ -27,17 +27,17 @@
             [System.Runtime.CompilerServices.MethodImpl(
                 System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining
             )]
-            public int CalculateSize(int value)
+            public int CalculateSize(byte value)
             {
-                return CodedOutputStream.ComputeInt32Size(value);
+                return CodedOutputStream.ComputeUInt32Size(value);
             }
 
             [System.Runtime.CompilerServices.MethodImpl(
                 System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining
             )]
-            public void WriteTo(ref WriterContext output, int value)
+            public void WriteTo(ref WriterContext output, byte value)
             {
-                output.WriteInt32(value);
+                output.WriteUInt32(value);
             }
         }
     }
