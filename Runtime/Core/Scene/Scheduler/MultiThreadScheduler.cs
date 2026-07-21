@@ -1,4 +1,4 @@
-#if !FANTASY_WEBGL || !FANTASY_SINGLETHREAD
+#if !FANTASY_WEBGL && !UNITY_WEBGL && !FANTASY_SINGLETHREAD
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
@@ -57,8 +57,26 @@ namespace Fantasy
             {
                 IsBackground = true
             };
-            _threads.TryAdd(scene.RuntimeId, new MultiThreadStruct(thread, cts));
-            thread.Start();
+            
+            var multiThreadStruct = new MultiThreadStruct(thread, cts);
+            
+            if (!_threads.TryAdd(scene.RuntimeId, multiThreadStruct))
+            {
+                multiThreadStruct.Dispose();
+                throw new InvalidOperationException(
+                    $"Scene RuntimeId already exists: {scene.RuntimeId}.");
+            }
+            
+            try
+            {
+                thread.Start();
+            }
+            catch
+            {
+                _threads.TryRemove(scene.RuntimeId, out _);
+                multiThreadStruct.Dispose();
+                throw;
+            }
         }
 
         public void Remove(Scene scene)
@@ -90,6 +108,14 @@ namespace Fantasy
                     }
 
                     sceneThreadSynchronizationContext.Update();
+                    
+                    // 同步上下文中可能刚刚执行了 Scene.Close/Dispose。
+                    // 必须重新检查，不能继续调用已经销毁的 Scene。
+                    if (cancellationToken.IsCancellationRequested || scene.IsDisposed)
+                    {
+                        return;
+                    }
+                    
                     scene.Update();
                 }
                 catch (Exception e)

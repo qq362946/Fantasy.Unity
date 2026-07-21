@@ -3,7 +3,11 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Fantasy.Async;
 using Fantasy.IdFactory;
-
+#if FANTASY_WEBGL || UNITY_WEBGL
+using FCloseTask = Fantasy.Async.FTask;
+#else
+using FCloseTask = Fantasy.Async.FThreadTask;
+#endif
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 #pragma warning disable CS8601 // Possible null reference assignment.
 namespace Fantasy.Platform.Net;
@@ -18,15 +22,20 @@ public sealed class Process
     /// </summary>
     public readonly uint Id;
     /// <summary>
+    /// 进程所属的Namespace ID
+    /// </summary>
+    public readonly uint NamespaceId;
+    /// <summary>
     /// 进程关联的MachineId
     /// </summary>
     public readonly uint MachineId;
     private readonly ConcurrentDictionary<uint, Scene> _processScenes = new ConcurrentDictionary<uint, Scene>();
     private static readonly ConcurrentDictionary<uint, Scene> Scenes = new ConcurrentDictionary<uint, Scene>();
     private Process() {}
-    private Process(uint id, uint machineId)
+    private Process(uint id, uint namespaceId, uint machineId)
     {
         Id = id;
+        NamespaceId = namespaceId;
         MachineId = machineId;
     }
     
@@ -43,12 +52,16 @@ public sealed class Process
     
     internal void AddSceneToProcess(Scene scene)
     {
-        _processScenes.TryAdd(scene.SceneConfigId, scene);
+        if (!_processScenes.TryAdd(scene.SceneConfigId, scene))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate Scene ID: {scene.SceneConfigId}.");
+        }
     }
 
     internal void RemoveSceneToProcess(Scene scene)
     {
-        _processScenes.Remove(scene.SceneConfigId, out _);
+        _processScenes.TryRemove(new KeyValuePair<uint, Scene>(scene.SceneConfigId, scene));
     }
     
     internal bool TryGetSceneToProcess(long address, out Scene scene)
@@ -65,7 +78,7 @@ public sealed class Process
     /// <summary>
     /// 关闭
     /// </summary>
-    public async FTask Close()
+    public async FCloseTask Close()
     {
         if (_processScenes.IsEmpty)
         {
@@ -101,12 +114,20 @@ public sealed class Process
             return null;
         }
 
-        var process = new Process(processConfigId, processConfig.MachineId);
+        var process = new Process(processConfigId, processConfig.NamespaceId, processConfig.MachineId);
         var sceneConfigs = SceneConfigData.Instance.GetByProcess(processConfigId);
 
-        foreach (var sceneConfig in sceneConfigs)
+        try
         {
-            await Scene.Create(process, machineConfig, sceneConfig);
+            foreach (var sceneConfig in sceneConfigs)
+            {
+                await Scene.Create(process, machineConfig, sceneConfig);
+            }
+        }
+        catch
+        {
+            await process.Close();
+            throw;
         }
 
         Log.Info($"Process:{processConfigId} Startup Complete SceneCount:{sceneConfigs.Count}");
@@ -120,12 +141,16 @@ public sealed class Process
 
     internal static void AddScene(Scene scene)
     {
-        Scenes.TryAdd(scene.SceneConfigId, scene);
+        if (!Scenes.TryAdd(scene.SceneConfigId, scene))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate Scene ID: {scene.SceneConfigId}.");
+        }
     }
 
     internal static void RemoveScene(Scene scene, bool isDispose)
     {
-        if (!Scenes.Remove(scene.SceneConfigId, out _))
+        if (!Scenes.TryRemove(new KeyValuePair<uint, Scene>(scene.SceneConfigId, scene)))
         {
             return;
         }
