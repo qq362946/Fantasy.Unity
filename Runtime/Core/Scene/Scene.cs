@@ -272,6 +272,51 @@ namespace Fantasy
             }
 #endif
             
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+            await SwitchToSceneThread();
+#endif
+            
+            // SubScene 拥有独立的 TerminusComponent。
+            // Root Scene 关闭前，必须先完成所有 SubScene 的异步清理。
+            foreach (var subScene in _entities.Values.OfType<SubScene>().ToArray())
+            {
+                try
+                {
+                    await subScene.Close();
+                }
+                catch (Exception e)
+                {
+                    closeException = closeException == null
+                        ? e
+                        : new AggregateException(closeException, e);
+                }
+            }
+            
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+            // SubScene.Close 可能发生异步等待，继续关闭 Root Scene 前重新切回 Scene 线程。
+            await SwitchToSceneThread();
+#endif
+
+#if FANTASY_NET
+            // 网络自行决定是否需要异步释放，Scene不感知具体协议。
+            if (OuterNetwork is IAsyncDisposable asyncDisposable)
+            {
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                await SwitchToSceneThread();
+#endif
+                try
+                {
+                    await asyncDisposable.DisposeAsync();
+                }
+                catch (Exception e)
+                {
+                    closeException = closeException == null
+                        ? e
+                        : new AggregateException(closeException, e);
+                }
+            }
+#endif
+
 #if FANTASY_NET
             try
             {
@@ -571,7 +616,10 @@ namespace Fantasy
             
                     return;
                 }
-                
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                await scene.SwitchToSceneThread();
+#endif
+
                 tcs.SetResult(scene);
             }
         }
@@ -585,7 +633,7 @@ namespace Fantasy
 #endif
 #if FANTASY_NET
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Scene Create(Process process, byte worldId, uint sceneConfigId)
+        private static Scene Create(Process process, uint worldId, uint sceneConfigId)
         {
             var scene = new Scene();
             scene.Scene = scene;
@@ -609,7 +657,7 @@ namespace Fantasy
         /// <returns>创建成功后会返回创建的Scene的实例</returns>
         public static async FTask<Scene> Create(Process process, MachineConfig machineConfig, SceneConfig sceneConfig)
         {
-            var scene = Create(process, (byte)sceneConfig.WorldConfigId, sceneConfig.Id);
+            var scene = Create(process, sceneConfig.WorldConfigId, sceneConfig.Id);
             scene.SceneType = sceneConfig.SceneType;
             scene.SceneConfigId = sceneConfig.Id;
             await SetScheduler(scene, sceneConfig.SceneRuntimeMode);
@@ -620,7 +668,7 @@ namespace Fantasy
                 
                 if (sceneConfig.WorldConfigId != 0)
                 {
-                    scene.World = World.Create(scene, (byte)sceneConfig.WorldConfigId);
+                    scene.World = World.Create(scene, sceneConfig.WorldConfigId);
                 }
                 
                 if (sceneConfig.InnerPort != 0)
@@ -652,6 +700,9 @@ namespace Fantasy
                         }
 
                         await scene.EventComponent.PublishAsync(new OnCreateScene(scene));
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                        await scene.SwitchToSceneThread();
+#endif
                         await Entry.RegisterServiceSceneAsync(scene);
                     }
                     catch (Exception e)
@@ -659,6 +710,10 @@ namespace Fantasy
                         tcs.SetException(e);
                         return;
                     }
+
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                    await scene.SwitchToSceneThread();
+#endif
 
                     tcs.SetResult(scene);
                 }
@@ -688,6 +743,10 @@ namespace Fantasy
         public static async FTask<SubScene> CreateSubScene(Scene parentScene, int sceneType,
             Func<SubScene, Scene, FTask> onSubSceneSetup = null, Func<SubScene, Scene, FTask> onSubSceneCreated = null)
         {
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+            await parentScene.SwitchToSceneThread();
+#endif
+
             var tcs = FTask<SubScene>.Create(false);
             var scene = new SubScene();
             scene.Scene = scene;
@@ -715,13 +774,22 @@ namespace Fantasy
                     if (onSubSceneSetup != null)
                     {
                         await onSubSceneSetup(scene, parentScene);
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                        await scene.SwitchToSceneThread();
+#endif
                     }
 
                     await scene.EventComponent.PublishAsync(new OnCreateScene(scene));
-                    
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                    await scene.SwitchToSceneThread();
+#endif
+
                     if (onSubSceneCreated != null)
                     {
                         await onSubSceneCreated(scene, parentScene);
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                        await scene.SwitchToSceneThread();
+#endif
                     }
                     
                     await Entry.RegisterServiceSceneAsync(scene);
@@ -741,6 +809,10 @@ namespace Fantasy
                     return;
                 }
 
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+                await scene.SwitchToSceneThread();
+#endif
+
                 tcs.SetResult(scene);
             }
         }
@@ -758,7 +830,6 @@ namespace Fantasy
 #endif
                     ThreadScheduler.AddMainScheduler(scene);
                     scene.SceneScheduler = ThreadScheduler.MainScheduler;
-                    await scene.Initialize();
                     break;
                 }
                 case "MultiThread":
@@ -771,7 +842,6 @@ namespace Fantasy
                     scene.SceneLateUpdate = new EmptySceneLateUpdate();
 #endif
                     scene.SceneScheduler = ThreadScheduler.AddToMultiThreadScheduler(scene);
-                    await scene.Initialize();
                     break;
                 }
                 case "ThreadPool":
@@ -784,7 +854,6 @@ namespace Fantasy
                     scene.SceneLateUpdate = new EmptySceneLateUpdate();
 #endif
                     scene.SceneScheduler = ThreadScheduler.AddToThreadPoolScheduler(scene);
-                    await scene.Initialize();
                     break;
                 }
                 default:
@@ -795,6 +864,17 @@ namespace Fantasy
                         $"Unsupported scene runtime mode. Expected '{SceneRuntimeMode.MainThread}', '{SceneRuntimeMode.MultiThread}', or '{SceneRuntimeMode.ThreadPool}'.");
                 }
             }
+
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+            await scene.SwitchToSceneThread();
+#endif
+
+            await scene.Initialize();
+
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+            // FTask 不保证恢复原上下文，初始化结束后再次确认。
+            await scene.SwitchToSceneThread();
+#endif
         }
         #endregion
 
@@ -1021,6 +1101,9 @@ namespace Fantasy
             var sceneId = IdFactoryHelper.RuntimeIdTool.GetSceneId(address);
             // 仅在本地确实没有路由时访问 Control Center。
             await ServiceDiscovery.ResolveAddressAsync(sceneId);
+#if !FANTASY_WEBGL && !UNITY_WEBGL
+            await SwitchToSceneThread();
+#endif
             // 重新经过 TryGetSession，复用可能已经由其他调用创建的 Session。
             return GetSession(address);
         }
@@ -1185,9 +1268,9 @@ namespace Fantasy
         /// 切换到当前 Scene 的线程同步上下文。
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected FThreadTask SwitchToSceneThread()
+        protected internal FThreadTask SwitchToSceneThread()
         {
-            var completion = FThreadTask.Create(false);
+            var completion = FThreadTask.Create();
             var context = ThreadSynchronizationContext;
 
             // Scene 已销毁，或者当前已经位于 Scene 上下文。
